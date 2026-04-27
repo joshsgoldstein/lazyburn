@@ -270,14 +270,21 @@ def aggregate(sessions: list[Session]) -> TokenUsage:
 
 def _filter_depth(sessions: list[Session], active_filter: str, home: Path) -> int:
     """Find how deep the filter path sits relative to home, so we can group one level below it."""
+    # If the filter is an absolute path (e.g. cwd), compute depth directly
+    filter_path = Path(active_filter)
+    if filter_path.is_absolute():
+        try:
+            return len(filter_path.relative_to(home).parts)
+        except ValueError:
+            pass
+
+    # Otherwise it's a substring — search session paths for a matching segment
     for s in sessions:
         if not s.project_path:
             continue
         try:
             rel = Path(s.project_path).relative_to(home)
             parts = rel.parts
-            # find the part index where the filter string appears
-            joined = str(Path(*parts))
             for i in range(1, len(parts) + 1):
                 segment = str(Path(*parts[:i]))
                 if active_filter.strip("/") in segment:
@@ -329,17 +336,18 @@ def parse_date(s: Optional[str]) -> Optional[datetime]:
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
 @click.group(invoke_without_command=True)
-@click.argument("path_filter", required=False)
+@click.option("--path", "path_filter", default=None, metavar="PATH", help="Filter by path substring (e.g. acme)")
 @click.option("--depth", default=2, show_default=True, help="Folder depth to group by")
 @click.option("--all", "show_all", is_flag=True, help="Show all projects, ignore current directory")
+@click.option("--sessions", "show_sessions", is_flag=True, help="Also show per-session breakdown below folder summary")
 @click.option("--since", default=None, metavar="YYYY-MM-DD", help="Only include sessions after this date")
 @click.option("--until", default=None, metavar="YYYY-MM-DD", help="Only include sessions before this date")
 @click.option("--export", default=None, metavar="FILE", help="Export results to CSV")
 @click.pass_context
-def cli(ctx, path_filter, depth, show_all, since, until, export):
+def cli(ctx, path_filter, depth, show_all, show_sessions, since, until, export):
     """Claude Code cost tracker. Run from any project directory to see its burn.
 
-    Pass a path fragment to filter: lazyburn solutionsguy
+    Filter to a folder: lazyburn --path acme
     """
     if ctx.invoked_subcommand:
         return
@@ -372,12 +380,18 @@ def cli(ctx, path_filter, depth, show_all, since, until, export):
         sorted_groups = sorted(groups.items(), key=lambda x: aggregate(x[1]).cost, reverse=True)
         if len(groups) > 1:
             _print_groups(sorted_groups, sessions)
+            if show_sessions:
+                console.print()
+                _print_sessions(sessions)
         else:
             _print_sessions(sessions)
     else:
         groups = group_by_depth(sessions, depth, home)
         sorted_groups = sorted(groups.items(), key=lambda x: aggregate(x[1]).cost, reverse=True)
         _print_groups(sorted_groups, sessions)
+        if show_sessions:
+            console.print()
+            _print_sessions(sessions)
 
     if export:
         _export_csv(export, sorted_groups)
@@ -385,27 +399,24 @@ def cli(ctx, path_filter, depth, show_all, since, until, export):
 
 
 @cli.command()
-@click.argument("path_filter", required=False)
-@click.option("--path", "path_opt", default=None, metavar="PATH", help="Filter by path substring")
+@click.option("--path", "path_filter", default=None, metavar="PATH", help="Filter by path substring")
 @click.option("--since", default=None, metavar="YYYY-MM-DD")
 @click.option("--until", default=None, metavar="YYYY-MM-DD")
 @click.option("--export", default=None, metavar="FILE")
-def sessions(path_filter, path_opt, since, until, export):
+def sessions(path_filter, since, until, export):
     """Show individual session breakdown.
 
     \b
     lazyburn sessions                    # current directory
-    lazyburn sessions --path thalus      # filter by path
+    lazyburn sessions --path acme        # filter by path
     """
     since_dt = parse_date(since)
     until_dt = parse_date(until)
     home = Path.home()
 
-    active_filter = path_opt or path_filter
     cwd = Path.cwd()
-    if not active_filter and cwd != home:
-        active_filter = str(cwd)
-    path_filter = active_filter
+    if not path_filter and cwd != home:
+        path_filter = str(cwd)
 
     with console.status("[dim]Reading sessions...[/dim]"):
         all_sessions = parse_all_sessions(home / ".claude", since_dt, until_dt, path_filter)

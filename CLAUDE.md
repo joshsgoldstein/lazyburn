@@ -40,6 +40,5 @@ Unknown models fall back to Sonnet 4.6 pricing.
 
 ## Known issues
 
-- `lazyburn sessions --path <filter>` has a Click arg/subcommand ordering bug — use `lazyburn sessions` from the target directory instead, or pass path as positional arg to the main command.
 - Duration is wall-clock (start to end of session), not active API time.
 - OpenCode sessions not included (different format, mostly free models).

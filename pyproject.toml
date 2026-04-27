@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tallyburn"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "click",
+    "rich",
+]
+
+[project.scripts]
+tallyburn = "tallyburn:cli"
+
+[tool.setuptools]
+py-modules = ["tallyburn"]

@@ -1,4 +1,4 @@
-package main
+package output
 
 import (
 	"encoding/csv"
@@ -12,11 +12,19 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
+	"github.com/joshsgoldstein/lazyburn/internal/models"
+	"github.com/joshsgoldstein/lazyburn/internal/parser"
 )
+
+// Group is a named bucket of sessions for table display.
+type Group struct {
+	Folder   string
+	Sessions []models.Session
+}
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
 
-func fmtTokens(n int) string {
+func FmtTokens(n int) string {
 	switch {
 	case n >= 1_000_000:
 		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
@@ -27,11 +35,11 @@ func fmtTokens(n int) string {
 	}
 }
 
-func fmtCost(cost float64) string {
+func FmtCost(cost float64) string {
 	return fmt.Sprintf("$%.2f", cost)
 }
 
-func fmtDuration(minutes float64) string {
+func FmtDuration(minutes float64) string {
 	switch {
 	case minutes <= 0:
 		return "-"
@@ -42,7 +50,7 @@ func fmtDuration(minutes float64) string {
 	}
 }
 
-func dateRange(sessions []Session) string {
+func DateRange(sessions []models.Session) string {
 	var lo, hi time.Time
 	for _, s := range sessions {
 		if s.StartTime.IsZero() {
@@ -66,7 +74,7 @@ func dateRange(sessions []Session) string {
 	return loStr + " – " + hiStr
 }
 
-func groupLabel(folder, prefix string) string {
+func GroupLabel(folder, prefix string) string {
 	label := strings.TrimPrefix(folder, prefix)
 	switch {
 	case label == folder && prefix != "":
@@ -77,7 +85,7 @@ func groupLabel(folder, prefix string) string {
 	return label
 }
 
-func commonPrefix(folders []string) string {
+func CommonPrefix(folders []string) string {
 	if len(folders) <= 1 {
 		return ""
 	}
@@ -136,7 +144,7 @@ var tableStyle = table.Style{
 		Header: text.FormatDefault,
 		Row:    text.FormatDefault,
 	},
-	HTML: table.DefaultHTMLOptions,
+	HTML:    table.DefaultHTMLOptions,
 	Options: table.Options{
 		DrawBorder:      false,
 		SeparateColumns: false,
@@ -149,13 +157,8 @@ var tableStyle = table.Style{
 
 // ── Group table ────────────────────────────────────────────────────────────────
 
-type Group struct {
-	Folder   string
-	Sessions []Session
-}
-
-func PrintGroups(groups []Group, allSessions []Session) {
-	if dr := dateRange(allSessions); dr != "" {
+func PrintGroups(groups []Group, allSessions []models.Session) {
+	if dr := DateRange(allSessions); dr != "" {
 		fmt.Println(dr)
 	}
 
@@ -163,7 +166,7 @@ func PrintGroups(groups []Group, allSessions []Session) {
 	for i, g := range groups {
 		folders[i] = g.Folder
 	}
-	prefix := commonPrefix(folders)
+	prefix := CommonPrefix(folders)
 	if prefix != "" {
 		fmt.Printf("%s\n", prefix)
 	}
@@ -171,7 +174,7 @@ func PrintGroups(groups []Group, allSessions []Session) {
 	totalCost := 0.0
 	totalTokens := 0
 	for _, g := range groups {
-		u := Aggregate(g.Sessions)
+		u := parser.Aggregate(g.Sessions)
 		totalCost += u.Cost
 		totalTokens += u.Input + u.CacheWrite() + u.CacheRead + u.Output
 	}
@@ -193,40 +196,40 @@ func PrintGroups(groups []Group, allSessions []Session) {
 	})
 
 	for _, g := range groups {
-		u := Aggregate(g.Sessions)
+		u := parser.Aggregate(g.Sessions)
 		turns := 0
 		totalMins := 0.0
 		for _, s := range g.Sessions {
 			turns += s.TurnCount
 			totalMins += s.DurationMinutes()
 		}
-		label := groupLabel(g.Folder, prefix)
+		label := GroupLabel(g.Folder, prefix)
 		tokens := u.Input + u.CacheWrite() + u.CacheRead + u.Output
 		t.AppendRow(table.Row{
 			label,
 			len(g.Sessions),
 			turns,
-			fmtDuration(totalMins),
-			fmtTokens(tokens),
-			fmtTokens(u.CacheWrite()),
-			fmtTokens(u.CacheRead),
-			fmtTokens(u.Output),
-			fmtCost(u.Cost),
+			FmtDuration(totalMins),
+			FmtTokens(tokens),
+			FmtTokens(u.CacheWrite()),
+			FmtTokens(u.CacheRead),
+			FmtTokens(u.Output),
+			FmtCost(u.Cost),
 		})
 	}
 
-	t.AppendFooter(table.Row{"TOTAL", len(allSessions), "", "", fmtTokens(totalTokens), "", "", "", fmtCost(totalCost)})
+	t.AppendFooter(table.Row{"TOTAL", len(allSessions), "", "", FmtTokens(totalTokens), "", "", "", FmtCost(totalCost)})
 	t.Render()
 }
 
 // ── Session table ──────────────────────────────────────────────────────────────
 
-func PrintSessions(sessions []Session) {
+func PrintSessions(sessions []models.Session) {
 	sort.Slice(sessions, func(i, j int) bool {
 		return sessions[i].Usage.Cost > sessions[j].Usage.Cost
 	})
 
-	if dr := dateRange(sessions); dr != "" {
+	if dr := DateRange(sessions); dr != "" {
 		fmt.Println(dr)
 	}
 
@@ -255,12 +258,12 @@ func PrintSessions(sessions []Session) {
 		}
 		t.AppendRow(table.Row{
 			slug, proj, dateStr,
-			fmtDuration(s.DurationMinutes()),
+			FmtDuration(s.DurationMinutes()),
 			s.TurnCount,
-			fmtTokens(s.Usage.CacheWrite()),
-			fmtTokens(s.Usage.CacheRead),
-			fmtTokens(s.Usage.Output),
-			fmtCost(s.Usage.Cost),
+			FmtTokens(s.Usage.CacheWrite()),
+			FmtTokens(s.Usage.CacheRead),
+			FmtTokens(s.Usage.Output),
+			FmtCost(s.Usage.Cost),
 			prompt,
 		})
 	}
@@ -278,7 +281,7 @@ func ExportGroupsCSV(path string, groups []Group) error {
 	w := csv.NewWriter(f)
 	w.Write([]string{"folder", "sessions", "turns", "cache_write_tokens", "cache_read_tokens", "output_tokens", "estimated_cost_usd"})
 	for _, g := range groups {
-		u := Aggregate(g.Sessions)
+		u := parser.Aggregate(g.Sessions)
 		turns := 0
 		for _, s := range g.Sessions {
 			turns += s.TurnCount
@@ -293,7 +296,7 @@ func ExportGroupsCSV(path string, groups []Group) error {
 	return w.Error()
 }
 
-func ExportSessionsCSV(path string, sessions []Session) error {
+func ExportSessionsCSV(path string, sessions []models.Session) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -305,18 +308,18 @@ func ExportSessionsCSV(path string, sessions []Session) error {
 		return sessions[i].Usage.Cost > sessions[j].Usage.Cost
 	})
 	for _, s := range sessions {
-		models := make([]string, 0, len(s.Models))
+		modelList := make([]string, 0, len(s.Models))
 		for m := range s.Models {
-			models = append(models, m)
+			modelList = append(modelList, m)
 		}
-		sort.Strings(models)
+		sort.Strings(modelList)
 		dateStr := ""
 		if !s.StartTime.IsZero() {
 			dateStr = s.StartTime.Format("2006-01-02")
 		}
 		w.Write([]string{
 			s.ID, s.Slug, s.ProjectPath, dateStr, strconv.Itoa(s.TurnCount),
-			strings.Join(models, "|"),
+			strings.Join(modelList, "|"),
 			strconv.Itoa(s.Usage.CacheWrite5m), strconv.Itoa(s.Usage.CacheWrite1h),
 			strconv.Itoa(s.Usage.CacheRead), strconv.Itoa(s.Usage.Output),
 			fmt.Sprintf("%.6f", s.Usage.Cost), s.LastPrompt,

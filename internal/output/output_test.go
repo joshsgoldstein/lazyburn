@@ -1,8 +1,10 @@
-package main
+package output
 
 import (
 	"testing"
 	"time"
+
+	"github.com/joshsgoldstein/lazyburn/internal/models"
 )
 
 func TestFmtTokens(t *testing.T) {
@@ -19,9 +21,9 @@ func TestFmtTokens(t *testing.T) {
 		{2_500_000, "2.5M"},
 	}
 	for _, c := range cases {
-		got := fmtTokens(c.in)
+		got := FmtTokens(c.in)
 		if got != c.want {
-			t.Errorf("fmtTokens(%d) = %q, want %q", c.in, got, c.want)
+			t.Errorf("FmtTokens(%d) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
@@ -38,9 +40,9 @@ func TestFmtCost(t *testing.T) {
 		{0.005, "$0.01"},
 	}
 	for _, c := range cases {
-		got := fmtCost(c.in)
+		got := FmtCost(c.in)
 		if got != c.want {
-			t.Errorf("fmtCost(%f) = %q, want %q", c.in, got, c.want)
+			t.Errorf("FmtCost(%f) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
@@ -59,60 +61,60 @@ func TestFmtDuration(t *testing.T) {
 		{148.4, "2.5h"},
 	}
 	for _, c := range cases {
-		got := fmtDuration(c.in)
+		got := FmtDuration(c.in)
 		if got != c.want {
-			t.Errorf("fmtDuration(%f) = %q, want %q", c.in, got, c.want)
+			t.Errorf("FmtDuration(%f) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
 
 func TestDateRangeEmpty(t *testing.T) {
-	if dateRange(nil) != "" {
+	if DateRange(nil) != "" {
 		t.Error("expected empty string for no sessions")
 	}
-	if dateRange([]Session{{}}) != "" {
+	if DateRange([]models.Session{{}}) != "" {
 		t.Error("expected empty string for session with zero time")
 	}
 }
 
 func TestDateRangeSingleDay(t *testing.T) {
-	s := Session{StartTime: time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)}
-	got := dateRange([]Session{s})
+	s := models.Session{StartTime: time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)}
+	got := DateRange([]models.Session{s})
 	if got != "2026-04-01" {
 		t.Errorf("single day: got %q want 2026-04-01", got)
 	}
 }
 
 func TestDateRangeSpan(t *testing.T) {
-	sessions := []Session{
+	sessions := []models.Session{
 		{StartTime: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
 		{StartTime: time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC)},
 		{StartTime: time.Date(2026, 4, 30, 0, 0, 0, 0, time.UTC)},
 	}
-	got := dateRange(sessions)
+	got := DateRange(sessions)
 	if got != "2026-04-01 – 2026-04-30" {
 		t.Errorf("span: got %q want 2026-04-01 – 2026-04-30", got)
 	}
 }
 
 func TestCommonPrefixNone(t *testing.T) {
-	if commonPrefix(nil) != "" {
+	if CommonPrefix(nil) != "" {
 		t.Error("nil input should return empty")
 	}
-	if commonPrefix([]string{"a"}) != "" {
+	if CommonPrefix([]string{"a"}) != "" {
 		t.Error("single item should return empty")
 	}
 }
 
 func TestCommonPrefixShared(t *testing.T) {
-	got := commonPrefix([]string{"Documents/acme/alpha", "Documents/acme/beta"})
+	got := CommonPrefix([]string{"Documents/acme/alpha", "Documents/acme/beta"})
 	if got != "Documents/acme/" {
 		t.Errorf("got %q want Documents/acme/", got)
 	}
 }
 
 func TestCommonPrefixNoShared(t *testing.T) {
-	got := commonPrefix([]string{"acme/alpha", "globex/main"})
+	got := CommonPrefix([]string{"acme/alpha", "globex/main"})
 	if got != "" {
 		t.Errorf("no common prefix: got %q want empty", got)
 	}
@@ -124,14 +126,14 @@ func TestGroupLabel(t *testing.T) {
 	}{
 		{"acme/alpha", "acme/", "alpha"},
 		{"acme/beta", "acme/", "beta"},
-		{"acme", "acme/", "(this folder)"},  // sessions directly in the filtered folder
-		{"acme", "", "acme"},                 // no prefix — use full name
-		{"acme/alpha", "", "acme/alpha"},     // no prefix — use full name
+		{"acme", "acme/", "(this folder)"},
+		{"acme", "", "acme"},
+		{"acme/alpha", "", "acme/alpha"},
 	}
 	for _, c := range cases {
-		got := groupLabel(c.folder, c.prefix)
+		got := GroupLabel(c.folder, c.prefix)
 		if got != c.want {
-			t.Errorf("groupLabel(%q, %q) = %q, want %q", c.folder, c.prefix, got, c.want)
+			t.Errorf("GroupLabel(%q, %q) = %q, want %q", c.folder, c.prefix, got, c.want)
 		}
 	}
 }

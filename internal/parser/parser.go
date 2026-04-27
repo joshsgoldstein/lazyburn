@@ -1,4 +1,4 @@
-package main
+package parser
 
 import (
 	"bufio"
@@ -8,35 +8,35 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/joshsgoldstein/lazyburn/internal/models"
+	"github.com/joshsgoldstein/lazyburn/internal/pricing"
 )
 
-// These structs mirror the shape of each JSON line in a .jsonl file.
-// The `json:"fieldName"` tags tell Go which JSON key maps to which field.
-
 type jsonMessage struct {
-	Type      string          `json:"type"`
-	Timestamp string          `json:"timestamp"`
-	Cwd       string          `json:"cwd"`
-	RequestID string          `json:"requestId"`
-	SessionID string          `json:"sessionId"`
-	Subtype   string          `json:"subtype"`
-	Slug      string          `json:"slug"`
-	Message   jsonInnerMsg    `json:"message"`
-	LastPrompt string         `json:"lastPrompt"`
+	Type       string          `json:"type"`
+	Timestamp  string          `json:"timestamp"`
+	Cwd        string          `json:"cwd"`
+	RequestID  string          `json:"requestId"`
+	SessionID  string          `json:"sessionId"`
+	Subtype    string          `json:"subtype"`
+	Slug       string          `json:"slug"`
+	Message    jsonInnerMsg    `json:"message"`
+	LastPrompt string          `json:"lastPrompt"`
 }
 
 type jsonInnerMsg struct {
-	ID    string   `json:"id"`
-	Model string   `json:"model"`
+	ID    string    `json:"id"`
+	Model string    `json:"model"`
 	Usage jsonUsage `json:"usage"`
 }
 
 type jsonUsage struct {
-	InputTokens          int              `json:"input_tokens"`
-	OutputTokens         int              `json:"output_tokens"`
-	CacheReadInputTokens int              `json:"cache_read_input_tokens"`
-	CacheCreationInputTokens int          `json:"cache_creation_input_tokens"`
-	CacheCreation        jsonCacheCreation `json:"cache_creation"`
+	InputTokens              int              `json:"input_tokens"`
+	OutputTokens             int              `json:"output_tokens"`
+	CacheReadInputTokens     int              `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int              `json:"cache_creation_input_tokens"`
+	CacheCreation            jsonCacheCreation `json:"cache_creation"`
 }
 
 type jsonCacheCreation struct {
@@ -44,21 +44,20 @@ type jsonCacheCreation struct {
 	Ephemeral1h int `json:"ephemeral_1h_input_tokens"`
 }
 
-// dedupEntry holds the last-seen usage for a given dedup key.
 type dedupEntry struct {
-	usage TokenUsage
+	usage models.TokenUsage
 	model string
 }
 
 // ParseAllSessions reads every .jsonl file under claudeDir/projects/.
-func ParseAllSessions(claudeDir string, since, until time.Time, pathFilter string) ([]Session, error) {
+func ParseAllSessions(claudeDir string, since, until time.Time, pathFilter string) ([]models.Session, error) {
 	projectsDir := filepath.Join(claudeDir, "projects")
 	entries, err := os.ReadDir(projectsDir)
 	if err != nil {
 		return nil, err
 	}
 
-	var sessions []Session
+	var sessions []models.Session
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -69,11 +68,11 @@ func ParseAllSessions(claudeDir string, since, until time.Time, pathFilter strin
 			continue
 		}
 		for _, f := range jsonlFiles {
-			s, err := parseJSONL(f, since, until)
+			s, err := ParseJSONL(f, since, until)
 			if err != nil || s == nil {
 				continue
 			}
-			if pathFilter != "" && !pathMatches(s.ProjectPath, pathFilter) {
+			if pathFilter != "" && !PathMatches(s.ProjectPath, pathFilter) {
 				continue
 			}
 			sessions = append(sessions, *s)
@@ -82,8 +81,8 @@ func ParseAllSessions(claudeDir string, since, until time.Time, pathFilter strin
 	return sessions, nil
 }
 
-// parseJSONL reads one session file and returns a Session, or nil if it has no cost data.
-func parseJSONL(path string, since, until time.Time) (*Session, error) {
+// ParseJSONL reads one session file and returns a Session, or nil if it has no cost data.
+func ParseJSONL(path string, since, until time.Time) (*models.Session, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -91,7 +90,7 @@ func parseJSONL(path string, since, until time.Time) (*Session, error) {
 	defer f.Close()
 
 	id := strings.TrimSuffix(filepath.Base(path), ".jsonl")
-	session := &Session{
+	session := &models.Session{
 		ID:     id,
 		Models: make(map[string]bool),
 	}
@@ -150,9 +149,9 @@ func parseJSONL(path string, since, until time.Time) (*Session, error) {
 				c5m = msg.Message.Usage.CacheCreationInputTokens
 			}
 
-			p := getPricing(msg.Message.Model)
+			p := pricing.Get(msg.Message.Model)
 			u := msg.Message.Usage
-			usage := TokenUsage{
+			usage := models.TokenUsage{
 				Input:        u.InputTokens,
 				CacheWrite5m: c5m,
 				CacheWrite1h: c1h,
@@ -165,7 +164,7 @@ func parseJSONL(path string, since, until time.Time) (*Session, error) {
 				float64(usage.CacheRead)*p.CacheRead +
 				float64(usage.Output)*p.Output) / 1_000_000
 
-			// Build dedup key — keep last occurrence (streaming replays each request).
+			// Keep last occurrence — streaming replays each request with the final token counts.
 			key := dedupKey(msg.Message.ID, msg.RequestID, msg.SessionID, len(deduped))
 			deduped[key] = dedupEntry{usage: usage, model: msg.Message.Model}
 
@@ -192,30 +191,8 @@ func parseJSONL(path string, since, until time.Time) (*Session, error) {
 	return session, nil
 }
 
-func dedupKey(msgID, reqID, sessID string, count int) string {
-	if msgID != "" && reqID != "" {
-		return "req:" + msgID + ":" + reqID
-	}
-	if msgID != "" && sessID != "" {
-		return "session:" + msgID + ":" + sessID
-	}
-	return fmt.Sprintf("anon:%d", count)
-}
-
-func parseTimestamp(s string) time.Time {
-	if s == "" {
-		return time.Time{}
-	}
-	s = strings.Replace(s, "Z", "+00:00", 1)
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return time.Time{}
-	}
-	return t
-}
-
-// pathMatches checks whether projectPath is under pathFilter (absolute) or contains it (substring).
-func pathMatches(projectPath, pathFilter string) bool {
+// PathMatches checks whether projectPath is under pathFilter (absolute) or contains it (substring).
+func PathMatches(projectPath, pathFilter string) bool {
 	if projectPath == "" {
 		return false
 	}
@@ -225,9 +202,9 @@ func pathMatches(projectPath, pathFilter string) bool {
 	return strings.Contains(projectPath, pathFilter)
 }
 
-// GroupByDepth buckets sessions by the first `depth` components of their path relative to home.
-func GroupByDepth(sessions []Session, depth int, home string) map[string][]Session {
-	groups := make(map[string][]Session)
+// GroupByDepth buckets sessions by the first `depth` path components relative to home.
+func GroupByDepth(sessions []models.Session, depth int, home string) map[string][]models.Session {
+	groups := make(map[string][]models.Session)
 	for _, s := range sessions {
 		key := pathKey(s.ProjectPath, depth, home)
 		groups[key] = append(groups[key], s)
@@ -251,16 +228,16 @@ func pathKey(projectPath string, depth int, home string) string {
 }
 
 // Aggregate sums token usage across a slice of sessions.
-func Aggregate(sessions []Session) TokenUsage {
-	var total TokenUsage
+func Aggregate(sessions []models.Session) models.TokenUsage {
+	var total models.TokenUsage
 	for _, s := range sessions {
 		total.Add(s.Usage)
 	}
 	return total
 }
 
-// FilterDepth returns the depth of the filter path relative to home.
-func FilterDepth(sessions []Session, activeFilter, home string) int {
+// FilterDepth returns the grouping depth for the given filter relative to home.
+func FilterDepth(sessions []models.Session, activeFilter, home string) int {
 	filterPath := filepath.Clean(activeFilter)
 	if filepath.IsAbs(filterPath) {
 		rel, err := filepath.Rel(home, filterPath)
@@ -287,4 +264,26 @@ func FilterDepth(sessions []Session, activeFilter, home string) int {
 		}
 	}
 	return 2
+}
+
+func dedupKey(msgID, reqID, sessID string, count int) string {
+	if msgID != "" && reqID != "" {
+		return "req:" + msgID + ":" + reqID
+	}
+	if msgID != "" && sessID != "" {
+		return "session:" + msgID + ":" + sessID
+	}
+	return fmt.Sprintf("anon:%d", count)
+}
+
+func parseTimestamp(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	s = strings.Replace(s, "Z", "+00:00", 1)
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }

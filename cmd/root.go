@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"fmt"
@@ -6,15 +6,11 @@ import (
 	"sort"
 	"time"
 
+	"github.com/joshsgoldstein/lazyburn/internal/models"
+	"github.com/joshsgoldstein/lazyburn/internal/output"
+	"github.com/joshsgoldstein/lazyburn/internal/parser"
 	"github.com/spf13/cobra"
 )
-
-func parseDate(s string) (time.Time, error) {
-	if s == "" {
-		return time.Time{}, nil
-	}
-	return time.Parse("2006-01-02", s)
-}
 
 var rootCmd = &cobra.Command{
 	Use:   "lazyburn",
@@ -46,6 +42,14 @@ func init() {
 	rootCmd.AddCommand(sessionsCmd)
 }
 
+// Execute is the entry point called from main.
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
 func runRoot(cmd *cobra.Command, args []string) error {
 	since, err := parseDate(flagSince)
 	if err != nil {
@@ -68,7 +72,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		activeFilter = cwd
 	}
 
-	sessions, err := ParseAllSessions(claudeDir, since, until, activeFilter)
+	sessions, err := parser.ParseAllSessions(claudeDir, since, until, activeFilter)
 	if err != nil {
 		return err
 	}
@@ -82,41 +86,41 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	}
 
 	if activeFilter != "" {
-		fd := FilterDepth(sessions, activeFilter, home)
-		groupMap := GroupByDepth(sessions, fd+1, home)
+		fd := parser.FilterDepth(sessions, activeFilter, home)
+		groupMap := parser.GroupByDepth(sessions, fd+1, home)
 		groups := sortedGroups(groupMap)
 
 		if len(groups) > 1 {
-			PrintGroups(groups, sessions)
+			output.PrintGroups(groups, sessions)
 			if flagShowSession {
 				fmt.Println()
-				PrintSessions(sessions)
+				output.PrintSessions(sessions)
 			}
 			if flagExport != "" {
-				if err := ExportGroupsCSV(flagExport, groups); err != nil {
+				if err := output.ExportGroupsCSV(flagExport, groups); err != nil {
 					return err
 				}
 				fmt.Printf("Exported to %s\n", flagExport)
 			}
 		} else {
-			PrintSessions(sessions)
+			output.PrintSessions(sessions)
 			if flagExport != "" {
-				if err := ExportSessionsCSV(flagExport, sessions); err != nil {
+				if err := output.ExportSessionsCSV(flagExport, sessions); err != nil {
 					return err
 				}
 				fmt.Printf("Exported to %s\n", flagExport)
 			}
 		}
 	} else {
-		groupMap := GroupByDepth(sessions, flagDepth, home)
+		groupMap := parser.GroupByDepth(sessions, flagDepth, home)
 		groups := sortedGroups(groupMap)
-		PrintGroups(groups, sessions)
+		output.PrintGroups(groups, sessions)
 		if flagShowSession {
 			fmt.Println()
-			PrintSessions(sessions)
+			output.PrintSessions(sessions)
 		}
 		if flagExport != "" {
-			if err := ExportGroupsCSV(flagExport, groups); err != nil {
+			if err := output.ExportGroupsCSV(flagExport, groups); err != nil {
 				return err
 			}
 			fmt.Printf("Exported to %s\n", flagExport)
@@ -125,74 +129,20 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// sessionsCmd is the `lazyburn sessions` subcommand.
-var sessionsCmd = &cobra.Command{
-	Use:   "sessions",
-	Short: "Show individual session breakdown",
-	Long: `Show individual session breakdown.
-
-  lazyburn sessions               # current directory
-  lazyburn sessions --path acme   # filter by path`,
-	RunE: runSessions,
-}
-
-var (
-	flagSessionsPath   string
-	flagSessionsExport string
-)
-
-func init() {
-	sessionsCmd.Flags().StringVar(&flagSessionsPath, "path", "", "Filter by path substring")
-	sessionsCmd.Flags().StringVar(&flagSessionsExport, "export", "", "Export results to CSV")
-}
-
-func runSessions(cmd *cobra.Command, args []string) error {
-	since, err := parseDate(flagSince)
-	if err != nil {
-		return fmt.Errorf("invalid --since: %w", err)
-	}
-	until, err := parseDate(flagUntil)
-	if err != nil {
-		return fmt.Errorf("invalid --until: %w", err)
-	}
-
-	home, _ := os.UserHomeDir()
-	cwd, _ := os.Getwd()
-	claudeDir := fmt.Sprintf("%s/.claude", home)
-
-	pathFilter := flagSessionsPath
-	if pathFilter == "" && cwd != home {
-		pathFilter = cwd
-	}
-
-	sessions, err := ParseAllSessions(claudeDir, since, until, pathFilter)
-	if err != nil {
-		return err
-	}
-	if len(sessions) == 0 {
-		fmt.Println("No sessions found.")
-		return nil
-	}
-
-	PrintSessions(sessions)
-
-	if flagSessionsExport != "" {
-		if err := ExportSessionsCSV(flagSessionsExport, sessions); err != nil {
-			return err
-		}
-		fmt.Printf("Exported to %s\n", flagSessionsExport)
-	}
-	return nil
-}
-
-// sortedGroups converts the map from GroupByDepth into a slice sorted by cost descending.
-func sortedGroups(groupMap map[string][]Session) []Group {
-	groups := make([]Group, 0, len(groupMap))
+func sortedGroups(groupMap map[string][]models.Session) []output.Group {
+	groups := make([]output.Group, 0, len(groupMap))
 	for folder, sessions := range groupMap {
-		groups = append(groups, Group{Folder: folder, Sessions: sessions})
+		groups = append(groups, output.Group{Folder: folder, Sessions: sessions})
 	}
 	sort.Slice(groups, func(i, j int) bool {
-		return Aggregate(groups[i].Sessions).Cost > Aggregate(groups[j].Sessions).Cost
+		return parser.Aggregate(groups[i].Sessions).Cost > parser.Aggregate(groups[j].Sessions).Cost
 	})
 	return groups
+}
+
+func parseDate(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+	return time.Parse("2006-01-02", s)
 }

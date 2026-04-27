@@ -1,4 +1,4 @@
-package main
+package parser
 
 import (
 	"encoding/json"
@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-)
 
-// ── helpers ────────────────────────────────────────────────────────────────────
+	"github.com/joshsgoldstein/lazyburn/internal/models"
+)
 
 func writeJSONL(t *testing.T, lines []map[string]any) string {
 	t.Helper()
@@ -45,8 +45,8 @@ func assistantMsg(msgID, reqID string, input, output int) map[string]any {
 	}
 }
 
-func makeSession(projectPath string, cost float64) Session {
-	s := Session{
+func makeSession(projectPath string, cost float64) models.Session {
+	s := models.Session{
 		ID:          "test",
 		ProjectPath: projectPath,
 		Models:      make(map[string]bool),
@@ -58,12 +58,11 @@ func makeSession(projectPath string, cost float64) Session {
 // ── deduplication ──────────────────────────────────────────────────────────────
 
 func TestParseKeepsLastDuplicate(t *testing.T) {
-	// streaming replays the same requestId — we must keep the last (highest) token counts
 	path := writeJSONL(t, []map[string]any{
 		assistantMsg("msg-1", "req-1", 100, 50),
-		assistantMsg("msg-1", "req-1", 200, 150), // last = authoritative
+		assistantMsg("msg-1", "req-1", 200, 150),
 	})
-	s, err := parseJSONL(path, time.Time{}, time.Time{})
+	s, err := ParseJSONL(path, time.Time{}, time.Time{})
 	if err != nil || s == nil {
 		t.Fatalf("expected a session, got err=%v s=%v", err, s)
 	}
@@ -80,7 +79,7 @@ func TestParseCountsDistinctRequests(t *testing.T) {
 		assistantMsg("msg-1", "req-1", 100, 50),
 		assistantMsg("msg-2", "req-2", 200, 100),
 	})
-	s, err := parseJSONL(path, time.Time{}, time.Time{})
+	s, err := ParseJSONL(path, time.Time{}, time.Time{})
 	if err != nil || s == nil {
 		t.Fatalf("expected a session, got err=%v s=%v", err, s)
 	}
@@ -96,7 +95,7 @@ func TestParseSkipsSyntheticModel(t *testing.T) {
 	msg := assistantMsg("msg-1", "req-1", 100, 50)
 	msg["message"].(map[string]any)["model"] = "<synthetic>"
 	path := writeJSONL(t, []map[string]any{msg})
-	s, _ := parseJSONL(path, time.Time{}, time.Time{})
+	s, _ := ParseJSONL(path, time.Time{}, time.Time{})
 	if s != nil {
 		t.Error("expected nil session for synthetic-only file")
 	}
@@ -104,7 +103,7 @@ func TestParseSkipsSyntheticModel(t *testing.T) {
 
 func TestParseEmptyFile(t *testing.T) {
 	path := writeJSONL(t, nil)
-	s, _ := parseJSONL(path, time.Time{}, time.Time{})
+	s, _ := ParseJSONL(path, time.Time{}, time.Time{})
 	if s != nil {
 		t.Error("expected nil for empty file")
 	}
@@ -112,7 +111,7 @@ func TestParseEmptyFile(t *testing.T) {
 
 func TestParseReadsCwd(t *testing.T) {
 	path := writeJSONL(t, []map[string]any{assistantMsg("msg-1", "req-1", 10, 5)})
-	s, _ := parseJSONL(path, time.Time{}, time.Time{})
+	s, _ := ParseJSONL(path, time.Time{}, time.Time{})
 	if s == nil {
 		t.Fatal("expected a session")
 	}
@@ -122,20 +121,18 @@ func TestParseReadsCwd(t *testing.T) {
 }
 
 func TestParseSinceFilter(t *testing.T) {
-	// message is before the since cutoff — should be excluded
 	path := writeJSONL(t, []map[string]any{assistantMsg("msg-1", "req-1", 100, 50)})
 	since := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
-	s, _ := parseJSONL(path, since, time.Time{})
+	s, _ := ParseJSONL(path, since, time.Time{})
 	if s != nil {
 		t.Error("expected nil when all messages are before --since")
 	}
 }
 
 func TestParseUntilFilter(t *testing.T) {
-	// message is after the until cutoff — should be excluded
 	path := writeJSONL(t, []map[string]any{assistantMsg("msg-1", "req-1", 100, 50)})
 	until := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	s, _ := parseJSONL(path, time.Time{}, until)
+	s, _ := ParseJSONL(path, time.Time{}, until)
 	if s != nil {
 		t.Error("expected nil when all messages are after --until")
 	}
@@ -147,7 +144,7 @@ func TestParseTurnCount(t *testing.T) {
 		{"type": "system", "subtype": "turn_duration", "slug": "brave-ancient-reef"},
 		{"type": "system", "subtype": "turn_duration", "slug": "sleepy-golden-tide"},
 	})
-	s, _ := parseJSONL(path, time.Time{}, time.Time{})
+	s, _ := ParseJSONL(path, time.Time{}, time.Time{})
 	if s == nil {
 		t.Fatal("expected a session")
 	}
@@ -164,7 +161,7 @@ func TestParseLastPrompt(t *testing.T) {
 		assistantMsg("msg-1", "req-1", 10, 5),
 		{"type": "last-prompt", "lastPrompt": "implement the auth flow"},
 	})
-	s, _ := parseJSONL(path, time.Time{}, time.Time{})
+	s, _ := ParseJSONL(path, time.Time{}, time.Time{})
 	if s == nil {
 		t.Fatal("expected a session")
 	}
@@ -176,32 +173,31 @@ func TestParseLastPrompt(t *testing.T) {
 // ── path matching ──────────────────────────────────────────────────────────────
 
 func TestPathMatchesAbsolutePrefix(t *testing.T) {
-	if !pathMatches("/home/user/acme/project", "/home/user/acme") {
+	if !PathMatches("/home/user/acme/project", "/home/user/acme") {
 		t.Error("expected match for path under filter")
 	}
 }
 
 func TestPathMatchesAbsoluteExact(t *testing.T) {
-	if !pathMatches("/home/user/acme", "/home/user/acme") {
+	if !PathMatches("/home/user/acme", "/home/user/acme") {
 		t.Error("expected match for exact path")
 	}
 }
 
 func TestPathMatchesNoFalsePositiveOnSimilarPrefix(t *testing.T) {
-	// /acme must NOT match /acme-backend
-	if pathMatches("/home/user/acme-backend/proj", "/home/user/acme") {
+	if PathMatches("/home/user/acme-backend/proj", "/home/user/acme") {
 		t.Error("acme-backend should not match acme filter")
 	}
 }
 
 func TestPathMatchesSubstring(t *testing.T) {
-	if !pathMatches("/home/user/acme/project", "acme") {
+	if !PathMatches("/home/user/acme/project", "acme") {
 		t.Error("expected substring match")
 	}
 }
 
 func TestPathMatchesEmptyProjectPath(t *testing.T) {
-	if pathMatches("", "acme") {
+	if PathMatches("", "acme") {
 		t.Error("empty project path should not match")
 	}
 }
@@ -210,7 +206,7 @@ func TestPathMatchesEmptyProjectPath(t *testing.T) {
 
 func TestGroupByDepth(t *testing.T) {
 	home := "/home/user"
-	sessions := []Session{
+	sessions := []models.Session{
 		makeSession("/home/user/acme/alpha", 1),
 		makeSession("/home/user/acme/beta", 1),
 		makeSession("/home/user/globex/main", 1),
@@ -228,7 +224,7 @@ func TestGroupByDepth(t *testing.T) {
 }
 
 func TestAggregate(t *testing.T) {
-	sessions := []Session{makeSession("/p", 1.5), makeSession("/p", 2.5)}
+	sessions := []models.Session{makeSession("/p", 1.5), makeSession("/p", 2.5)}
 	total := Aggregate(sessions)
 	if total.Cost != 4.0 {
 		t.Errorf("Aggregate cost: got %f want 4.0", total.Cost)
@@ -239,7 +235,7 @@ func TestAggregate(t *testing.T) {
 
 func TestFilterDepthAbsolutePath(t *testing.T) {
 	home := "/home/user"
-	sessions := []Session{makeSession("/home/user/acme/project", 1)}
+	sessions := []models.Session{makeSession("/home/user/acme/project", 1)}
 	depth := FilterDepth(sessions, "/home/user/acme", home)
 	if depth != 1 {
 		t.Errorf("FilterDepth: got %d want 1", depth)
@@ -248,7 +244,7 @@ func TestFilterDepthAbsolutePath(t *testing.T) {
 
 func TestFilterDepthSubstring(t *testing.T) {
 	home := "/home/user"
-	sessions := []Session{makeSession("/home/user/acme/project", 1)}
+	sessions := []models.Session{makeSession("/home/user/acme/project", 1)}
 	depth := FilterDepth(sessions, "acme", home)
 	if depth != 1 {
 		t.Errorf("FilterDepth substring: got %d want 1", depth)
@@ -258,7 +254,6 @@ func TestFilterDepthSubstring(t *testing.T) {
 // ── ParseAllSessions integration ───────────────────────────────────────────────
 
 func TestParseAllSessionsPathFilter(t *testing.T) {
-	// build a fake ~/.claude/projects/ structure
 	dir := t.TempDir()
 	proj1 := filepath.Join(dir, "projects", "-home-user-acme-alpha")
 	proj2 := filepath.Join(dir, "projects", "-home-user-globex-main")

@@ -1,9 +1,7 @@
-package main
+package models
 
 import "time"
 
-// TokenUsage holds token counts and cost for one or more messages.
-// Think of it like the Python TokenUsage dataclass.
 type TokenUsage struct {
 	Input        int
 	CacheWrite5m int
@@ -13,12 +11,6 @@ type TokenUsage struct {
 	Cost         float64
 }
 
-// CacheWrite is the total of both cache write tiers.
-func (u TokenUsage) CacheWrite() int {
-	return u.CacheWrite5m + u.CacheWrite1h
-}
-
-// Add accumulates another TokenUsage into this one (like Python's __iadd__).
 func (u *TokenUsage) Add(other TokenUsage) {
 	u.Input += other.Input
 	u.CacheWrite5m += other.CacheWrite5m
@@ -28,20 +20,22 @@ func (u *TokenUsage) Add(other TokenUsage) {
 	u.Cost += other.Cost
 }
 
-// Session represents one Claude Code session (.jsonl file).
+func (u TokenUsage) CacheWrite() int {
+	return u.CacheWrite5m + u.CacheWrite1h
+}
+
 type Session struct {
 	ID          string
 	ProjectPath string
 	Slug        string
+	LastPrompt  string
 	StartTime   time.Time
 	EndTime     time.Time
 	Usage       TokenUsage
 	Models      map[string]bool
 	TurnCount   int
-	LastPrompt  string
 }
 
-// DurationMinutes returns wall-clock duration of the session in minutes.
 func (s Session) DurationMinutes() float64 {
 	if s.StartTime.IsZero() || s.EndTime.IsZero() {
 		return 0

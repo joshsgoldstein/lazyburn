@@ -1,13 +1,7 @@
 package main
 
-import (
-	"fmt"
-	"os"
-)
+import "github.com/joshsgoldstein/lazyburn/cmd"
 
 func main() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	cmd.Execute()
 }

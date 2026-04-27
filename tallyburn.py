@@ -262,6 +262,19 @@ def aggregate(sessions: list[Session]) -> TokenUsage:
 
 # ── Formatting ─────────────────────────────────────────────────────────────────
 
+def _common_prefix(paths: list[str]) -> str:
+    if not paths or len(paths) == 1:
+        return ""
+    parts = [p.split("/") for p in paths]
+    common = []
+    for segment in zip(*parts):
+        if len(set(segment)) == 1:
+            common.append(segment[0])
+        else:
+            break
+    return "/".join(common) + "/" if common else ""
+
+
 def fmt_tokens(n: int) -> str:
     if n >= 1_000_000:
         return f"{n / 1_000_000:.1f}M"
@@ -283,14 +296,18 @@ def parse_date(s: Optional[str]) -> Optional[datetime]:
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
 @click.group(invoke_without_command=True)
+@click.argument("path_filter", required=False)
 @click.option("--depth", default=2, show_default=True, help="Folder depth to group by")
 @click.option("--all", "show_all", is_flag=True, help="Show all projects, ignore current directory")
 @click.option("--since", default=None, metavar="YYYY-MM-DD", help="Only include sessions after this date")
 @click.option("--until", default=None, metavar="YYYY-MM-DD", help="Only include sessions before this date")
 @click.option("--export", default=None, metavar="FILE", help="Export results to CSV")
 @click.pass_context
-def cli(ctx, depth, show_all, since, until, export):
-    """Claude Code cost tracker. Run from any project directory to see its burn."""
+def cli(ctx, path_filter, depth, show_all, since, until, export):
+    """Claude Code cost tracker. Run from any project directory to see its burn.
+
+    Pass a path fragment to filter: tallyburn solutionsguy
+    """
     if ctx.invoked_subcommand:
         return
 
@@ -299,35 +316,39 @@ def cli(ctx, depth, show_all, since, until, export):
     home = Path.home()
     cwd = Path.cwd()
 
-    # if we're inside a known project directory and --all not passed, auto-filter
-    path_filter = None
-    if not show_all and cwd != home:
-        path_filter = str(cwd)
+    # resolve what to filter on — explicit arg wins, then cwd, then everything
+    if path_filter:
+        active_filter = path_filter
+    elif not show_all and cwd != home:
+        active_filter = str(cwd)
+    else:
+        active_filter = None
 
     with console.status("[dim]Reading sessions...[/dim]"):
-        sessions = parse_all_sessions(home / ".claude", since_dt, until_dt, path_filter)
+        sessions = parse_all_sessions(home / ".claude", since_dt, until_dt, active_filter)
 
     if not sessions:
-        if path_filter:
-            console.print(f"[yellow]No sessions found under[/yellow] {cwd}")
-            console.print("[dim]Run with --all to see everything.[/dim]")
-        else:
-            console.print("[yellow]No sessions found.[/yellow]")
+        label = active_filter or "anywhere"
+        console.print(f"[yellow]No sessions found matching[/yellow] {label}")
         return
 
-    if path_filter:
-        # in a specific directory: show session-level detail directly
-        _print_sessions(sessions)
+    # if filtered to a specific path, show session-level detail
+    # if global, group by depth
+    if active_filter:
+        groups = group_by_depth(sessions, depth + 2, home)
+        sorted_groups = sorted(groups.items(), key=lambda x: aggregate(x[1]).cost, reverse=True)
+        if len(groups) > 1:
+            _print_groups(sorted_groups, sessions)
+        else:
+            _print_sessions(sessions)
     else:
-        # global view: group by depth
         groups = group_by_depth(sessions, depth, home)
         sorted_groups = sorted(groups.items(), key=lambda x: aggregate(x[1]).cost, reverse=True)
         _print_groups(sorted_groups, sessions)
-        if export:
-            _export_csv(export, sorted_groups)
-            console.print(f"[green]Exported to {export}[/green]")
 
-    console.print("\n[dim]Cost estimates apply to API key billing only, not subscription plans.[/dim]")
+    if export:
+        _export_csv(export, sorted_groups)
+        console.print(f"[green]Exported to {export}[/green]")
 
 
 @cli.command()
@@ -359,8 +380,6 @@ def sessions(path_filter, since, until, export):
         _export_sessions_csv(export, all_sessions)
         console.print(f"[green]Exported to {export}[/green]")
 
-    console.print("\n[dim]Cost estimates apply to API key billing only, not subscription plans.[/dim]")
-
 
 # ── Output helpers ─────────────────────────────────────────────────────────────
 
@@ -368,20 +387,25 @@ def _print_groups(sorted_groups, all_sessions):
     total_cost = sum(aggregate(s).cost for _, s in sorted_groups)
     total_sessions = len(all_sessions)
 
+    # strip common prefix to keep folder names short
+    folders = [f for f, _ in sorted_groups]
+    prefix = _common_prefix(folders)
+
     table = Table(box=box.SIMPLE_HEAVY, show_footer=True, padding=(0, 1))
     table.add_column("Folder", footer="TOTAL", style="cyan", no_wrap=True)
-    table.add_column("Sessions", justify="right", footer=str(total_sessions))
+    table.add_column("Sess", justify="right", footer=str(total_sessions))
     table.add_column("Turns", justify="right", footer="")
-    table.add_column("Cache Write", justify="right", footer="")
-    table.add_column("Cache Read", justify="right", footer="")
+    table.add_column("Cache W", justify="right", footer="")
+    table.add_column("Cache R", justify="right", footer="")
     table.add_column("Output", justify="right", footer="")
-    table.add_column("Cost (est.)", justify="right", footer=fmt_cost(total_cost), style="green")
+    table.add_column("Cost", justify="right", footer=fmt_cost(total_cost), style="green", no_wrap=True, min_width=10)
 
     for folder, sess_list in sorted_groups:
         u = aggregate(sess_list)
         turns = sum(s.turn_count for s in sess_list)
+        label = folder[len(prefix):] or folder
         table.add_row(
-            folder,
+            label,
             str(len(sess_list)),
             str(turns),
             fmt_tokens(u.cache_write),
@@ -390,6 +414,8 @@ def _print_groups(sorted_groups, all_sessions):
             fmt_cost(u.cost),
         )
 
+    if prefix:
+        console.print(f"[dim]{prefix}[/dim]")
     console.print(table)
 
 
@@ -405,7 +431,7 @@ def _print_sessions(sessions: list[Session]):
     table.add_column("Cache Write", justify="right")
     table.add_column("Cache Read", justify="right")
     table.add_column("Output", justify="right")
-    table.add_column("Cost (est.)", justify="right", style="green")
+    table.add_column("Cost", justify="right", style="green", no_wrap=True, min_width=10)
     table.add_column("Last Prompt")
 
     for s in sessions:

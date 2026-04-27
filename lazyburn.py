@@ -97,6 +97,15 @@ class Session:
 
 # ── Parser ─────────────────────────────────────────────────────────────────────
 
+def _path_matches(project_path: str, path_filter: str) -> bool:
+    """True if project_path is under path_filter (absolute) or contains it as a substring (partial)."""
+    if not project_path:
+        return False
+    if os.path.isabs(path_filter):
+        return project_path == path_filter or project_path.startswith(path_filter + "/")
+    return path_filter in project_path
+
+
 def parse_all_sessions(
     claude_dir: Path,
     since: Optional[datetime] = None,
@@ -112,7 +121,7 @@ def parse_all_sessions(
             session = _parse_jsonl(jsonl_file, since, until)
             if session is None:
                 continue
-            if path_filter and path_filter not in session.project_path:
+            if path_filter and not _path_matches(session.project_path, path_filter):
                 continue
             sessions.append(session)
     return sessions
@@ -123,9 +132,9 @@ def _parse_jsonl(
     since: Optional[datetime],
     until: Optional[datetime],
 ) -> Optional[Session]:
-    seen: set[str] = set()
+    # keyed by dedup_key -> (TokenUsage, model); overwritten on each occurrence so we keep the last
+    deduped: dict[str, tuple[TokenUsage, str]] = {}
     session = Session(session_id=path.stem, project_path="")
-    has_cost_data = False
 
     try:
         lines = path.read_text().splitlines()
@@ -165,23 +174,6 @@ def _parse_jsonl(
             if model == "<synthetic>":
                 continue
 
-            # dedup: prefer message.id + requestId, fall back to message.id + sessionId
-            msg_id = message.get("id")
-            req_id = msg.get("requestId")
-            sess_id = msg.get("sessionId")
-
-            if msg_id and req_id:
-                dedup_key = f"req:{msg_id}:{req_id}"
-            elif msg_id and sess_id:
-                dedup_key = f"session:{msg_id}:{sess_id}"
-            else:
-                dedup_key = None
-
-            if dedup_key:
-                if dedup_key in seen:
-                    continue
-                seen.add(dedup_key)
-
             # date filter on individual messages
             if ts:
                 if since and ts < since:
@@ -214,9 +206,20 @@ def _parse_jsonl(
                 + usage.output * p["output"]
             ) / 1_000_000
 
-            session.usage += usage
-            session.models.add(model)
-            has_cost_data = True
+            # dedup: prefer message.id + requestId, fall back to message.id + sessionId
+            # streaming replays the same request multiple times — keep the last (most complete) entry
+            msg_id = message.get("id")
+            req_id = msg.get("requestId")
+            sess_id = msg.get("sessionId")
+
+            if msg_id and req_id:
+                dedup_key = f"req:{msg_id}:{req_id}"
+            elif msg_id and sess_id:
+                dedup_key = f"session:{msg_id}:{sess_id}"
+            else:
+                dedup_key = f"anon:{len(deduped)}"
+
+            deduped[dedup_key] = (usage, model)
 
         elif msg_type == "system" and msg.get("subtype") == "turn_duration":
             session.turn_count += 1
@@ -226,7 +229,11 @@ def _parse_jsonl(
         elif msg_type == "last-prompt":
             session.last_prompt = msg.get("lastPrompt", "")
 
-    return session if has_cost_data else None
+    for usage, model in deduped.values():
+        session.usage += usage
+        session.models.add(model)
+
+    return session if deduped else None
 
 
 def _parse_ts(ts_str: Optional[str]) -> Optional[datetime]:
@@ -278,7 +285,8 @@ def _filter_depth(sessions: list[Session], active_filter: str, home: Path) -> in
         except ValueError:
             pass
 
-    # Otherwise it's a substring — search session paths for a matching segment
+    # Otherwise it's a substring — find the depth where the filter matches a complete path suffix
+    filter_clean = active_filter.strip("/")
     for s in sessions:
         if not s.project_path:
             continue
@@ -287,7 +295,7 @@ def _filter_depth(sessions: list[Session], active_filter: str, home: Path) -> in
             parts = rel.parts
             for i in range(1, len(parts) + 1):
                 segment = str(Path(*parts[:i]))
-                if active_filter.strip("/") in segment:
+                if segment == filter_clean or segment.endswith("/" + filter_clean):
                     return i
         except ValueError:
             pass
@@ -383,8 +391,14 @@ def cli(ctx, path_filter, depth, show_all, show_sessions, since, until, export):
             if show_sessions:
                 console.print()
                 _print_sessions(sessions)
+            if export:
+                _export_csv(export, sorted_groups)
+                console.print(f"[green]Exported to {export}[/green]")
         else:
             _print_sessions(sessions)
+            if export:
+                _export_sessions_csv(export, sessions)
+                console.print(f"[green]Exported to {export}[/green]")
     else:
         groups = group_by_depth(sessions, depth, home)
         sorted_groups = sorted(groups.items(), key=lambda x: aggregate(x[1]).cost, reverse=True)
@@ -392,10 +406,9 @@ def cli(ctx, path_filter, depth, show_all, show_sessions, since, until, export):
         if show_sessions:
             console.print()
             _print_sessions(sessions)
-
-    if export:
-        _export_csv(export, sorted_groups)
-        console.print(f"[green]Exported to {export}[/green]")
+        if export:
+            _export_csv(export, sorted_groups)
+            console.print(f"[green]Exported to {export}[/green]")
 
 
 @cli.command()

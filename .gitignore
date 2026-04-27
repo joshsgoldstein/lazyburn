@@ -5,3 +5,6 @@ dist/
 build/
 *.pyc
 .DS_Store
+
+lazyburn
+lazyburn.exe

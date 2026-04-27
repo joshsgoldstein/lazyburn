@@ -12,7 +12,15 @@
 
 ---
 
-`lazyburn` reads directly from `~/.claude/projects/` — no config, no API key — and shows your Claude Code spending broken down by folder, sub-project, and session.
+## Why this exists
+
+I use Claude Code across a lot of projects and had no idea where my money or time was actually going. The Anthropic dashboard shows you a total — it doesn't tell you which project cost $40 last week or how many hours you've sunk into a specific codebase. I built lazyburn to answer those questions: what am I spending, on what, and is it worth it?
+
+If you're running Claude Code across multiple projects and want that same visibility, this is for you.
+
+---
+
+`lazyburn` reads directly from `~/.claude/projects/` — no config, no API key — and shows your spending broken down by folder, sub-project, and session.
 
 ```
 $ lazyburn --all
@@ -35,7 +43,7 @@ $ cd ~/Documents/acme/alpha-platform && lazyburn
 
 2026-03-01 – 2026-04-26
 Documents/acme/alpha-platform/
-  Session               Date        Time   Turns    Tokens    Cache W    Cache R    Output        Cost   Last Prompt
+  Session               Date        Time   Turns     Tokens    Cache W    Cache R    Output        Cost   Last Prompt
  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   brave-ancient-reef    2026-04-22   6.3h      22    85.6M      3.1M     82.4M    312.1k    $43.21   implement the auth flow…
   sleepy-golden-tide    2026-04-19   4.1h      18    74.1M      2.8M     71.2M    268.5k    $37.44   fix the dashboard load…
@@ -56,7 +64,7 @@ Or, if you have Go installed:
 go install github.com/joshsgoldstein/lazyburn@latest
 ```
 
-Binaries for macOS (arm64/amd64), Linux (arm64/amd64), and Windows are available on the [releases page](https://github.com/joshsgoldstein/lazyburn/releases).
+Binaries for macOS (arm64/amd64), Linux (arm64/amd64), and Windows are on the [releases page](https://github.com/joshsgoldstein/lazyburn/releases).
 
 ---
 
@@ -65,6 +73,7 @@ Binaries for macOS (arm64/amd64), Linux (arm64/amd64), and Windows are available
 ```
 lazyburn [flags]
 lazyburn sessions [flags]
+lazyburn update-pricing
 ```
 
 ### Flags
@@ -82,29 +91,28 @@ lazyburn sessions [flags]
 ### Examples
 
 ```sh
-# all projects rolled up by folder
+# see everything, grouped by top-level folder
 lazyburn --all
 
-# drill into a specific folder
+# drill into one client or project
 lazyburn --path acme
 
 # what did I spend this month?
 lazyburn --all --since 2026-04-01
 
-# folder summary + session breakdown together
+# folder summary + individual sessions together
 lazyburn --path acme --sessions
 
-# just sessions for a project
+# just the session list
 lazyburn sessions --path alpha-platform
 
-# export to CSV
+# export to CSV for a spreadsheet
 lazyburn --all --export costs.csv
-lazyburn sessions --path acme --export acme-sessions.csv
 ```
 
 ### Drilling into a folder
 
-When you filter to a path, lazyburn automatically groups one level deeper so you can see sub-project breakdown:
+Filtering to a path automatically groups one level deeper so you can see sub-project breakdown:
 
 ```
 $ lazyburn --path acme
@@ -112,16 +120,26 @@ $ lazyburn --path acme
 2026-03-01 – 2026-04-26
 Documents/acme/
   Folder              Sess   Turns     Time      Tokens    Cache W    Cache R    Output        Cost
- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   alpha-platform        13     147    112.3h    225.1M      8.2M    214.5M    774.4k    $108.62
   api-service            3      14     18.7h     22.5M      2.0M     20.4M    132.3k     $15.86
   data-pipeline          2       2      4.2h      1.8M     89.0k      1.7M     13.0k      $1.05
   (this folder)          2       4      8.1h      3.5M    320.0k      3.1M     20.0k      $2.10
- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   TOTAL                 20     167             252.9M                                   $127.63
 ```
 
-The common path prefix is shown above the table so folder names stay short. Sessions run directly from the filtered folder (not inside a sub-project) appear as `(this folder)`.
+The common path prefix is shown above the table so folder names stay compact. Sessions run directly from the filtered folder (not from a sub-project) appear as `(this folder)`.
+
+### Keeping pricing up to date
+
+Model pricing can change. Run this to pull the latest rates from the repo without updating the binary:
+
+```sh
+lazyburn update-pricing
+```
+
+Pricing is cached at `~/.claude/lazyburn/pricing.json` and used automatically on future runs. Falls back to compiled-in defaults if no cache exists.
 
 ---
 
@@ -129,9 +147,9 @@ The common path prefix is shown above the table so folder names stay short. Sess
 
 lazyburn reads `~/.claude/projects/` — the same directory Claude Code writes session logs to. Each subfolder is a project (the directory where you ran `claude`), and each `.jsonl` file inside is one session.
 
-### Why the numbers might differ from other tools
+### Why the token numbers might differ from other tools
 
-Most tools track three token buckets. Claude actually bills four:
+Claude's cache has two write tiers priced differently — a 5-minute tier and a 1-hour tier. Most tools collapse these into one and get the math wrong. lazyburn tracks all four buckets separately:
 
 | Bucket | JSON field | Multiplier |
 |---|---|---|
@@ -141,15 +159,17 @@ Most tools track three token buckets. Claude actually bills four:
 | Cache read | `cache_read_input_tokens` | 0.1× |
 | Output | `output_tokens` | 5× |
 
-Collapsing the two cache write tiers into one overestimates or underestimates cost depending on the session. lazyburn tracks all four separately.
+Claude Code also replays each assistant message multiple times as tokens stream in. lazyburn deduplicates by request ID and keeps the final count so nothing is double-billed.
 
-Claude Code also replays each assistant message multiple times as tokens stream in. lazyburn deduplicates by request ID and keeps the last (final) count so nothing is double-billed.
+### A note on duration
 
-> **Note:** Cost estimates reflect API token pricing. If you're on a Pro or Max subscription, token counts are accurate but dollar amounts represent the API equivalent — not your actual subscription cost.
+Session duration is wall-clock time from the first message to the last. A session you left open overnight will show many hours even if you only sent a few messages — there's no way to distinguish idle time from active time in the log data.
+
+> **Subscription users:** Token counts are accurate. Dollar amounts reflect API pricing — not your actual subscription cost.
 
 ---
 
-## Pricing
+## Pricing reference
 
 | Model | Input | Cache Write 5m | Cache Write 1h | Cache Read | Output |
 |---|---|---|---|---|---|

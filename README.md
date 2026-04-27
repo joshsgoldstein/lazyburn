@@ -114,6 +114,23 @@ lazyburn sessions --path alpha-platform
 lazyburn --all --export costs.csv
 ```
 
+### Understanding the columns
+
+| Column | What it means |
+|---|---|
+| **Folder / Session** | The project directory or the name Claude gave to that conversation |
+| **Sess** | Number of separate conversations started in that folder |
+| **Turns** | How many times you sent a message and got a response — one back-and-forth = one turn |
+| **Time** | How long the session was open (wall clock, not active time) |
+| **Tokens** | Total volume processed — Claude charges by the token, roughly 750 words = 1,000 tokens |
+| **Cache W** | Tokens written to Claude's memory so it remembers your context across turns |
+| **Cache R** | Tokens read back from that memory — much cheaper than re-sending everything fresh |
+| **Output** | Tokens Claude generated in its responses to you |
+| **Cost** | Estimated cost based on Anthropic's API pricing for the models used |
+| **Last Prompt** | The first message you sent in that session — useful for remembering what you were working on |
+
+> Cache W and Cache R are shown separately because they're priced differently and most tools get this wrong. See [How it works](#how-it-works) for the full breakdown.
+
 ### Drilling into a folder
 
 Filtering to a path automatically groups one level deeper so you can see sub-project breakdown:

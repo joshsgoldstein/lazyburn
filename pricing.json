@@ -1,0 +1,27 @@
+{
+  "updated": "2026-04-27",
+  "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+  "models": {
+    "claude-sonnet-4-6": {
+      "input": 3.00,
+      "cache5m": 3.75,
+      "cache1h": 6.00,
+      "cacheRead": 0.30,
+      "output": 15.00
+    },
+    "claude-opus-4-7": {
+      "input": 5.00,
+      "cache5m": 6.25,
+      "cache1h": 10.00,
+      "cacheRead": 0.50,
+      "output": 25.00
+    },
+    "claude-haiku-4-5": {
+      "input": 1.00,
+      "cache5m": 1.25,
+      "cache1h": 2.00,
+      "cacheRead": 0.10,
+      "output": 5.00
+    }
+  }
+}

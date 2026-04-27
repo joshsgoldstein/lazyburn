@@ -1,6 +1,9 @@
 package pricing
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestGetKnownModel(t *testing.T) {
 	p := Get("claude-sonnet-4-6")
@@ -35,4 +38,38 @@ func TestGetUnknownFallsBackToSonnet(t *testing.T) {
 	if p.Input != 3.0 {
 		t.Errorf("fallback should use sonnet pricing, got input %f", p.Input)
 	}
+}
+
+func TestLoadFileAndApply(t *testing.T) {
+	json := `{
+		"updated": "2026-01-01",
+		"source": "test",
+		"models": {
+			"claude-test-model": {"input": 9.0, "cache5m": 1.0, "cache1h": 2.0, "cacheRead": 0.5, "output": 45.0}
+		}
+	}`
+	f, err := os.CreateTemp(t.TempDir(), "pricing-*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(json)
+	f.Close()
+
+	pf, err := LoadFile(f.Name())
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if pf.Updated != "2026-01-01" {
+		t.Errorf("Updated: got %q want 2026-01-01", pf.Updated)
+	}
+
+	// Apply and verify Get uses the new prices.
+	ApplyFile(pf)
+	p := Get("claude-test-model")
+	if p.Input != 9.0 || p.Output != 45.0 {
+		t.Errorf("ApplyFile: unexpected prices %+v", p)
+	}
+
+	// Restore defaults so other tests are unaffected.
+	active = defaults
 }

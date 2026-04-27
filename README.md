@@ -18,6 +18,8 @@ I use Claude Code across a lot of projects and had no idea where my money or tim
 
 If you're a consultant, it's even more direct — your Claude Code spend maps to client work. lazyburn tells you exactly how much AI cost went to each project so you can bill accurately, protect your margins, and stop guessing.
 
+If you're building something with friends or a small team, it's an easy way to keep everyone honest about what the project is actually costing — no surprises at the end of the month.
+
 If you're running Claude Code across multiple projects and want that visibility, this is for you.
 
 ---

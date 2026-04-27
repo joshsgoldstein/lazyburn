@@ -236,10 +236,10 @@ func PrintSessions(sessions []models.Session) {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.SetStyle(tableStyle)
-	t.AppendHeader(table.Row{"Session", "Project", "Date", "Time", "Turns", "Cache W", "Cache R", "Output", "Cost", "Last Prompt"})
+	t.AppendHeader(table.Row{"Session", "Project", "Date", "Time", "Turns", "Tokens", "Cache W", "Cache R", "Output", "Cost", "Last Prompt"})
 	t.SetColumnConfigs([]table.ColumnConfig{
 		{Number: 1, Colors: text.Colors{text.FgCyan}},
-		{Number: 9, Align: text.AlignRight, Colors: text.Colors{text.FgGreen}, WidthMin: 10},
+		{Number: 10, Align: text.AlignRight, Colors: text.Colors{text.FgGreen}, WidthMin: 10},
 	})
 
 	for _, s := range sessions {
@@ -256,10 +256,12 @@ func PrintSessions(sessions []models.Session) {
 		if len([]rune(prompt)) > 40 {
 			prompt = string([]rune(prompt)[:40]) + "…"
 		}
+		tokens := s.Usage.Input + s.Usage.CacheWrite() + s.Usage.CacheRead + s.Usage.Output
 		t.AppendRow(table.Row{
 			slug, proj, dateStr,
 			FmtDuration(s.DurationMinutes()),
 			s.TurnCount,
+			FmtTokens(tokens),
 			FmtTokens(s.Usage.CacheWrite()),
 			FmtTokens(s.Usage.CacheRead),
 			FmtTokens(s.Usage.Output),

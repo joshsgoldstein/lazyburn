@@ -43,6 +43,13 @@ Particularly useful if you're reporting time to clients and don't want to explai
 
 ---
 
+### AI-generated session summaries
+Generate a plain-English summary of what happened in each session — what was built, what problems were solved, what was left open. Useful for reporting to clients, reviewing your own work, or just remembering what that 6-hour session was actually about.
+
+[Vote on this feature →](https://github.com/joshsgoldstein/lazyburn/issues/5)
+
+---
+
 ## Known limitations
 
 - **Duration is wall-clock time** — time between first and last message in a session, not active API time. A session left open overnight will show many hours.

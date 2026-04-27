@@ -16,7 +16,9 @@
 
 I use Claude Code across a lot of projects and had no idea where my money or time was actually going. The Anthropic dashboard shows you a total — it doesn't tell you which project cost $40 last week or how many hours you've sunk into a specific codebase. I built lazyburn to answer those questions: what am I spending, on what, and is it worth it?
 
-If you're running Claude Code across multiple projects and want that same visibility, this is for you.
+If you're a consultant, it's even more direct — your Claude Code spend maps to client work. lazyburn tells you exactly how much AI cost went to each project so you can bill accurately, protect your margins, and stop guessing.
+
+If you're running Claude Code across multiple projects and want that visibility, this is for you.
 
 ---
 
@@ -186,6 +188,8 @@ Per million tokens. Unknown models fall back to Sonnet 4.6 pricing. Source: [Ant
 PRs are welcome. For significant changes, open an issue first.
 
 All changes go through a pull request — CI must pass before merge.
+
+See [ROADMAP.md](ROADMAP.md) for what's planned. Vote on features by reacting 👍 to the corresponding GitHub issue.
 
 ---
 

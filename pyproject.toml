@@ -3,7 +3,7 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tallyburn"
+name = "lazyburn"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-tallyburn = "tallyburn:cli"
+lazyburn = "lazyburn:cli"
 
 [tool.setuptools]
-py-modules = ["tallyburn"]
+py-modules = ["lazyburn"]

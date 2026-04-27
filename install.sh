@@ -1,13 +1,13 @@
 #!/bin/sh
-# tallyburn installer
+# lazyburn installer
 #
 # Usage:
-#   curl -sSf https://raw.githubusercontent.com/joshsgoldstein/tallyburn/main/install.sh | sh
+#   curl -sSf https://raw.githubusercontent.com/joshsgoldstein/lazyburn/main/install.sh | sh
 
 set -e
 
-REPO="joshsgoldstein/tallyburn"
-BINARY_NAME="tallyburn"
+REPO="joshsgoldstein/lazyburn"
+BINARY_NAME="lazyburn"
 
 echo "Installing ${BINARY_NAME}..."
 
@@ -27,6 +27,6 @@ echo ""
 echo "${BINARY_NAME} installed. Run '${BINARY_NAME} --help' to get started."
 echo ""
 echo "Quick start:"
-echo "  tallyburn --all          # all projects by client"
-echo "  tallyburn solutionsguy   # drill into a folder"
-echo "  tallyburn sessions       # session-level detail for current directory"
+echo "  lazyburn --all          # all projects by client"
+echo "  lazyburn solutionsguy   # drill into a folder"
+echo "  lazyburn sessions       # session-level detail for current directory"

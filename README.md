@@ -1,4 +1,4 @@
-# tallyburn
+# lazyburn
 
 Claude Code cost tracker by folder. See how much each client, project, or session is burning — right from your terminal.
 
@@ -7,7 +7,7 @@ Built for consultants who use Claude Code across multiple clients and need to kn
 ## Install
 
 ```sh
-curl -sSf https://raw.githubusercontent.com/joshsgoldstein/tallyburn/main/install.sh | sh
+curl -sSf https://raw.githubusercontent.com/joshsgoldstein/lazyburn/main/install.sh | sh
 ```
 
 Requires Python 3.11+ and `pipx` (or `pip`).
@@ -16,30 +16,31 @@ Requires Python 3.11+ and `pipx` (or `pip`).
 
 ```sh
 # all projects grouped by client (depth 2 by default)
-tallyburn --all
+lazyburn --all
 
 # drill into a specific client or folder
-tallyburn solutionsguy
-tallyburn solutionsguy/thalus
+lazyburn acme
+lazyburn acme/project-alpha
 
 # session-level breakdown for current directory
-cd ~/Documents/solutionsguy/thalus/mcp-v2
-tallyburn
+cd ~/Documents/acme/project-alpha
+lazyburn
 
-# or from anywhere
-tallyburn sessions --path thalus
+# session-level breakdown from anywhere
+lazyburn sessions
+lazyburn sessions --path acme
 
 # filter by date
-tallyburn --all --since 2026-04-01
-tallyburn solutionsguy --since 2026-04-01 --until 2026-04-30
+lazyburn --all --since 2026-04-01
+lazyburn acme --since 2026-04-01 --until 2026-04-30
 
 # adjust grouping depth
-tallyburn --all --depth 3    # sub-project level
-tallyburn --all --depth 4    # repo level
+lazyburn --all --depth 3    # sub-project level
+lazyburn --all --depth 4    # repo level
 
 # export to CSV
-tallyburn --all --export costs.csv
-tallyburn sessions --path solutionsguy --export sessions.csv
+lazyburn --all --export costs.csv
+lazyburn sessions --path acme --export sessions.csv
 ```
 
 ## How it works
@@ -61,10 +62,10 @@ Duplicate messages are filtered using `requestId` to match actual API billing.
 ## Options
 
 ```
-tallyburn [PATH] [OPTIONS]
+lazyburn [PATH] [OPTIONS]
 
 Arguments:
-  PATH    Filter to paths containing this string (e.g. solutionsguy)
+  PATH    Filter to paths containing this string (e.g. acme)
 
 Options:
   --depth INTEGER     Folder depth to group by [default: 2]
@@ -74,7 +75,7 @@ Options:
   --export FILE       Export results to CSV
 
 Commands:
-  sessions            Session-level breakdown
+  sessions            Session-level breakdown (use --path to filter)
 ```
 
 ## Pricing

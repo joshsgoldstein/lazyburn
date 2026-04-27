@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tallyburn - Claude Code session cost tracker by folder"""
+"""lazyburn - Claude Code session cost tracker by folder"""
 
 import csv
 import json
@@ -87,6 +87,12 @@ class Session:
     models: set = field(default_factory=set)
     turn_count: int = 0
     last_prompt: str = ""
+
+    @property
+    def duration_minutes(self) -> float:
+        if self.start_time and self.end_time:
+            return (self.end_time - self.start_time).total_seconds() / 60
+        return 0.0
 
 
 # ── Parser ─────────────────────────────────────────────────────────────────────
@@ -262,6 +268,25 @@ def aggregate(sessions: list[Session]) -> TokenUsage:
 
 # ── Formatting ─────────────────────────────────────────────────────────────────
 
+def _filter_depth(sessions: list[Session], active_filter: str, home: Path) -> int:
+    """Find how deep the filter path sits relative to home, so we can group one level below it."""
+    for s in sessions:
+        if not s.project_path:
+            continue
+        try:
+            rel = Path(s.project_path).relative_to(home)
+            parts = rel.parts
+            # find the part index where the filter string appears
+            joined = str(Path(*parts))
+            for i in range(1, len(parts) + 1):
+                segment = str(Path(*parts[:i]))
+                if active_filter.strip("/") in segment:
+                    return i
+        except ValueError:
+            pass
+    return 2  # fallback
+
+
 def _common_prefix(paths: list[str]) -> str:
     if not paths or len(paths) == 1:
         return ""
@@ -287,6 +312,14 @@ def fmt_cost(cost: float) -> str:
     return f"${cost:,.4f}"
 
 
+def fmt_duration(minutes: float) -> str:
+    if minutes <= 0:
+        return "-"
+    if minutes >= 60:
+        return f"{minutes / 60:.1f}h"
+    return f"{minutes:.0f}m"
+
+
 def parse_date(s: Optional[str]) -> Optional[datetime]:
     if not s:
         return None
@@ -306,7 +339,7 @@ def parse_date(s: Optional[str]) -> Optional[datetime]:
 def cli(ctx, path_filter, depth, show_all, since, until, export):
     """Claude Code cost tracker. Run from any project directory to see its burn.
 
-    Pass a path fragment to filter: tallyburn solutionsguy
+    Pass a path fragment to filter: lazyburn solutionsguy
     """
     if ctx.invoked_subcommand:
         return
@@ -332,10 +365,10 @@ def cli(ctx, path_filter, depth, show_all, since, until, export):
         console.print(f"[yellow]No sessions found matching[/yellow] {label}")
         return
 
-    # if filtered to a specific path, show session-level detail
-    # if global, group by depth
     if active_filter:
-        groups = group_by_depth(sessions, depth + 2, home)
+        # group one level deeper than the filter path itself
+        filter_depth = _filter_depth(sessions, active_filter, home)
+        groups = group_by_depth(sessions, filter_depth + 1, home)
         sorted_groups = sorted(groups.items(), key=lambda x: aggregate(x[1]).cost, reverse=True)
         if len(groups) > 1:
             _print_groups(sorted_groups, sessions)
@@ -353,19 +386,26 @@ def cli(ctx, path_filter, depth, show_all, since, until, export):
 
 @cli.command()
 @click.argument("path_filter", required=False)
+@click.option("--path", "path_opt", default=None, metavar="PATH", help="Filter by path substring")
 @click.option("--since", default=None, metavar="YYYY-MM-DD")
 @click.option("--until", default=None, metavar="YYYY-MM-DD")
 @click.option("--export", default=None, metavar="FILE")
-def sessions(path_filter, since, until, export):
-    """Show individual session breakdown. Optionally filter by path substring."""
+def sessions(path_filter, path_opt, since, until, export):
+    """Show individual session breakdown.
+
+    \b
+    lazyburn sessions                    # current directory
+    lazyburn sessions --path thalus      # filter by path
+    """
     since_dt = parse_date(since)
     until_dt = parse_date(until)
     home = Path.home()
 
-    # default to cwd if no filter given and not at home
+    active_filter = path_opt or path_filter
     cwd = Path.cwd()
-    if not path_filter and cwd != home:
-        path_filter = str(cwd)
+    if not active_filter and cwd != home:
+        active_filter = str(cwd)
+    path_filter = active_filter
 
     with console.status("[dim]Reading sessions...[/dim]"):
         all_sessions = parse_all_sessions(home / ".claude", since_dt, until_dt, path_filter)
@@ -395,6 +435,7 @@ def _print_groups(sorted_groups, all_sessions):
     table.add_column("Folder", footer="TOTAL", style="cyan", no_wrap=True)
     table.add_column("Sess", justify="right", footer=str(total_sessions))
     table.add_column("Turns", justify="right", footer="")
+    table.add_column("Time", justify="right", footer="")
     table.add_column("Cache W", justify="right", footer="")
     table.add_column("Cache R", justify="right", footer="")
     table.add_column("Output", justify="right", footer="")
@@ -403,11 +444,13 @@ def _print_groups(sorted_groups, all_sessions):
     for folder, sess_list in sorted_groups:
         u = aggregate(sess_list)
         turns = sum(s.turn_count for s in sess_list)
+        total_mins = sum(s.duration_minutes for s in sess_list)
         label = folder[len(prefix):] or folder
         table.add_row(
             label,
             str(len(sess_list)),
             str(turns),
+            fmt_duration(total_mins),
             fmt_tokens(u.cache_write),
             fmt_tokens(u.cache_read),
             fmt_tokens(u.output),
@@ -426,10 +469,10 @@ def _print_sessions(sessions: list[Session]):
     table.add_column("Session", style="cyan", no_wrap=True)
     table.add_column("Project", no_wrap=True)
     table.add_column("Date")
+    table.add_column("Time", justify="right")
     table.add_column("Turns", justify="right")
-    table.add_column("Models")
-    table.add_column("Cache Write", justify="right")
-    table.add_column("Cache Read", justify="right")
+    table.add_column("Cache W", justify="right")
+    table.add_column("Cache R", justify="right")
     table.add_column("Output", justify="right")
     table.add_column("Cost", justify="right", style="green", no_wrap=True, min_width=10)
     table.add_column("Last Prompt")
@@ -443,8 +486,8 @@ def _print_sessions(sessions: list[Session]):
             slug,
             proj,
             date_str,
+            fmt_duration(s.duration_minutes),
             str(s.turn_count),
-            ", ".join(sorted(s.models)),
             fmt_tokens(s.usage.cache_write),
             fmt_tokens(s.usage.cache_read),
             fmt_tokens(s.usage.output),

@@ -3,7 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/joshsgoldstein/lazyburn/internal/models"
@@ -97,7 +99,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 				output.PrintSessions(sessions)
 			}
 			if flagExport != "" {
-				if err := output.ExportGroupsCSV(flagExport, groups); err != nil {
+				if err := exportGroups(flagExport, groups); err != nil {
 					return err
 				}
 				fmt.Printf("Exported to %s\n", flagExport)
@@ -105,7 +107,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		} else {
 			output.PrintSessions(sessions)
 			if flagExport != "" {
-				if err := output.ExportSessionsCSV(flagExport, sessions); err != nil {
+				if err := exportSessions(flagExport, sessions); err != nil {
 					return err
 				}
 				fmt.Printf("Exported to %s\n", flagExport)
@@ -120,13 +122,35 @@ func runRoot(cmd *cobra.Command, args []string) error {
 			output.PrintSessions(sessions)
 		}
 		if flagExport != "" {
-			if err := output.ExportGroupsCSV(flagExport, groups); err != nil {
+			if err := exportGroups(flagExport, groups); err != nil {
 				return err
 			}
 			fmt.Printf("Exported to %s\n", flagExport)
 		}
 	}
 	return nil
+}
+
+func exportGroups(path string, groups []output.Group) error {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".json":
+		return output.ExportGroupsJSON(path, groups)
+	case ".md":
+		return output.ExportGroupsMD(path, groups)
+	default:
+		return output.ExportGroupsCSV(path, groups)
+	}
+}
+
+func exportSessions(path string, sessions []models.Session) error {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".json":
+		return output.ExportSessionsJSON(path, sessions)
+	case ".md":
+		return output.ExportSessionsMD(path, sessions)
+	default:
+		return output.ExportSessionsCSV(path, sessions)
+	}
 }
 
 func sortedGroups(groupMap map[string][]models.Session) []output.Group {

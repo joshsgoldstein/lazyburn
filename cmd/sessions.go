@@ -60,7 +60,7 @@ func runSessions(cmd *cobra.Command, args []string) error {
 	output.PrintSessions(sessions)
 
 	if flagSessionsExport != "" {
-		if err := output.ExportSessionsCSV(flagSessionsExport, sessions); err != nil {
+		if err := exportSessions(flagSessionsExport, sessions); err != nil {
 			return err
 		}
 		fmt.Printf("Exported to %s\n", flagSessionsExport)

@@ -90,7 +90,7 @@ lazyburn update-pricing
 | `--sessions` | Show per-session breakdown below the folder table |
 | `--since <YYYY-MM-DD>` | Only include sessions after this date |
 | `--until <YYYY-MM-DD>` | Only include sessions before this date |
-| `--export <file.csv>` | Export results to CSV |
+| `--export <file>` | Export results — `.csv`, `.json`, or `.md` |
 
 ### Examples
 
@@ -112,6 +112,12 @@ lazyburn sessions --path alpha-platform
 
 # export to CSV for a spreadsheet
 lazyburn --all --export costs.csv
+
+# export to JSON for automations or dashboards
+lazyburn --all --export costs.json
+
+# export to Markdown for sharing with clients or pasting into a doc
+lazyburn --path acme --export acme-costs.md
 ```
 
 ### Understanding the columns

@@ -2,6 +2,7 @@ package output
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -159,7 +160,7 @@ var tableStyle = table.Style{
 
 func PrintGroups(groups []Group, allSessions []models.Session) {
 	if dr := DateRange(allSessions); dr != "" {
-		fmt.Println(dr)
+		fmt.Println("📅 " + dr)
 	}
 
 	folders := make([]string, len(groups))
@@ -179,10 +180,19 @@ func PrintGroups(groups []Group, allSessions []models.Session) {
 		totalTokens += u.Input + u.CacheWrite() + u.CacheRead + u.Output
 	}
 
+	// Find the top cost for 🔥 threshold (top 25% or at least the #1 row).
+	maxCost := 0.0
+	for _, g := range groups {
+		if c := parser.Aggregate(g.Sessions).Cost; c > maxCost {
+			maxCost = c
+		}
+	}
+	fireThreshold := maxCost * 0.75
+
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.SetStyle(tableStyle)
-	t.AppendHeader(table.Row{"Folder", "Sess", "Turns", "Time", "Tokens", "Cache W", "Cache R", "Output", "Cost"})
+	t.AppendHeader(table.Row{"Folder", "Sess", "Turns", "Time", "Tokens", "Cache W", "Cache R", "Output", "💰 Cost"})
 	t.SetColumnConfigs([]table.ColumnConfig{
 		{Number: 1, Colors: text.Colors{text.FgCyan}},
 		{Number: 2, Align: text.AlignRight},
@@ -204,6 +214,9 @@ func PrintGroups(groups []Group, allSessions []models.Session) {
 			totalMins += s.DurationMinutes()
 		}
 		label := GroupLabel(g.Folder, prefix)
+		if u.Cost >= fireThreshold {
+			label = "🔥 " + label
+		}
 		tokens := u.Input + u.CacheWrite() + u.CacheRead + u.Output
 		t.AppendRow(table.Row{
 			label,
@@ -230,13 +243,21 @@ func PrintSessions(sessions []models.Session) {
 	})
 
 	if dr := DateRange(sessions); dr != "" {
-		fmt.Println(dr)
+		fmt.Println("📅 " + dr)
 	}
+
+	maxCost := 0.0
+	for _, s := range sessions {
+		if s.Usage.Cost > maxCost {
+			maxCost = s.Usage.Cost
+		}
+	}
+	fireThreshold := maxCost * 0.75
 
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.SetStyle(tableStyle)
-	t.AppendHeader(table.Row{"Session", "Project", "Date", "Time", "Turns", "Tokens", "Cache W", "Cache R", "Output", "Cost", "Last Prompt"})
+	t.AppendHeader(table.Row{"Session", "Project", "Date", "Time", "Turns", "Tokens", "Cache W", "Cache R", "Output", "💰 Cost", "Last Prompt"})
 	t.SetColumnConfigs([]table.ColumnConfig{
 		{Number: 1, Colors: text.Colors{text.FgCyan}},
 		{Number: 10, Align: text.AlignRight, Colors: text.Colors{text.FgGreen}, WidthMin: 10},
@@ -246,6 +267,9 @@ func PrintSessions(sessions []models.Session) {
 		slug := s.Slug
 		if slug == "" && len(s.ID) >= 8 {
 			slug = s.ID[:8]
+		}
+		if s.Usage.Cost >= fireThreshold {
+			slug = "🔥 " + slug
 		}
 		proj := filepath.Base(s.ProjectPath)
 		dateStr := "?"
@@ -298,6 +322,91 @@ func ExportGroupsCSV(path string, groups []Group) error {
 	return w.Error()
 }
 
+func ExportGroupsJSON(path string, groups []Group) error {
+	type row struct {
+		Folder  string  `json:"folder"`
+		Sessions int    `json:"sessions"`
+		Turns   int     `json:"turns"`
+		CacheWriteTokens int `json:"cache_write_tokens"`
+		CacheReadTokens  int `json:"cache_read_tokens"`
+		OutputTokens     int `json:"output_tokens"`
+		EstimatedCostUSD float64 `json:"estimated_cost_usd"`
+	}
+	rows := make([]row, 0, len(groups))
+	for _, g := range groups {
+		u := parser.Aggregate(g.Sessions)
+		turns := 0
+		for _, s := range g.Sessions {
+			turns += s.TurnCount
+		}
+		rows = append(rows, row{
+			Folder:           g.Folder,
+			Sessions:         len(g.Sessions),
+			Turns:            turns,
+			CacheWriteTokens: u.CacheWrite(),
+			CacheReadTokens:  u.CacheRead,
+			OutputTokens:     u.Output,
+			EstimatedCostUSD: u.Cost,
+		})
+	}
+	b, err := json.MarshalIndent(rows, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(b, '\n'), 0644)
+}
+
+func ExportSessionsJSON(path string, sessions []models.Session) error {
+	type row struct {
+		SessionID        string   `json:"session_id"`
+		Slug             string   `json:"slug"`
+		ProjectPath      string   `json:"project_path"`
+		Date             string   `json:"date"`
+		Turns            int      `json:"turns"`
+		Models           []string `json:"models"`
+		CacheWrite5m     int      `json:"cache_write_5m"`
+		CacheWrite1h     int      `json:"cache_write_1h"`
+		CacheReadTokens  int      `json:"cache_read_tokens"`
+		OutputTokens     int      `json:"output_tokens"`
+		EstimatedCostUSD float64  `json:"estimated_cost_usd"`
+		LastPrompt       string   `json:"last_prompt"`
+	}
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].Usage.Cost > sessions[j].Usage.Cost
+	})
+	rows := make([]row, 0, len(sessions))
+	for _, s := range sessions {
+		modelList := make([]string, 0, len(s.Models))
+		for m := range s.Models {
+			modelList = append(modelList, m)
+		}
+		sort.Strings(modelList)
+		dateStr := ""
+		if !s.StartTime.IsZero() {
+			dateStr = s.StartTime.Format("2006-01-02")
+		}
+		rows = append(rows, row{
+			SessionID:        s.ID,
+			Slug:             s.Slug,
+			ProjectPath:      s.ProjectPath,
+			Date:             dateStr,
+			Turns:            s.TurnCount,
+			Models:           modelList,
+			CacheWrite5m:     s.Usage.CacheWrite5m,
+			CacheWrite1h:     s.Usage.CacheWrite1h,
+			CacheReadTokens:  s.Usage.CacheRead,
+			OutputTokens:     s.Usage.Output,
+			EstimatedCostUSD: s.Usage.Cost,
+			LastPrompt:       s.LastPrompt,
+		})
+	}
+	b, err := json.MarshalIndent(rows, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(b, '\n'), 0644)
+}
+
 func ExportSessionsCSV(path string, sessions []models.Session) error {
 	f, err := os.Create(path)
 	if err != nil {
@@ -329,4 +438,66 @@ func ExportSessionsCSV(path string, sessions []models.Session) error {
 	}
 	w.Flush()
 	return w.Error()
+}
+
+// ── Markdown export ────────────────────────────────────────────────────────────
+
+func ExportGroupsMD(path string, groups []Group) error {
+	var sb strings.Builder
+	sb.WriteString("# lazyburn — Cost by Folder\n\n")
+	sb.WriteString("| Folder | Sessions | Turns | Cache Write | Cache Read | Output | Cost |\n")
+	sb.WriteString("|--------|----------|-------|------------|------------|--------|------|\n")
+	for _, g := range groups {
+		u := parser.Aggregate(g.Sessions)
+		turns := 0
+		for _, s := range g.Sessions {
+			turns += s.TurnCount
+		}
+		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %s | %s | %s | %s |\n",
+			g.Folder,
+			len(g.Sessions),
+			turns,
+			FmtTokens(u.CacheWrite()),
+			FmtTokens(u.CacheRead),
+			FmtTokens(u.Output),
+			FmtCost(u.Cost),
+		))
+	}
+	return os.WriteFile(path, []byte(sb.String()), 0644)
+}
+
+func ExportSessionsMD(path string, sessions []models.Session) error {
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].Usage.Cost > sessions[j].Usage.Cost
+	})
+	var sb strings.Builder
+	sb.WriteString("# lazyburn — Session Breakdown\n\n")
+	sb.WriteString("| Session | Project | Date | Turns | Tokens | Cache Write | Cache Read | Output | Cost | Last Prompt |\n")
+	sb.WriteString("|---------|---------|------|-------|--------|------------|------------|--------|------|-------------|\n")
+	for _, s := range sessions {
+		slug := s.Slug
+		if slug == "" && len(s.ID) >= 8 {
+			slug = s.ID[:8]
+		}
+		proj := filepath.Base(s.ProjectPath)
+		dateStr := ""
+		if !s.StartTime.IsZero() {
+			dateStr = s.StartTime.Format("2006-01-02")
+		}
+		prompt := s.LastPrompt
+		if len([]rune(prompt)) > 60 {
+			prompt = string([]rune(prompt)[:60]) + "…"
+		}
+		tokens := s.Usage.Input + s.Usage.CacheWrite() + s.Usage.CacheRead + s.Usage.Output
+		sb.WriteString(fmt.Sprintf("| %s | %s | %s | %d | %s | %s | %s | %s | %s | %s |\n",
+			slug, proj, dateStr, s.TurnCount,
+			FmtTokens(tokens),
+			FmtTokens(s.Usage.CacheWrite()),
+			FmtTokens(s.Usage.CacheRead),
+			FmtTokens(s.Usage.Output),
+			FmtCost(s.Usage.Cost),
+			strings.ReplaceAll(prompt, "|", "\\|"),
+		))
+	}
+	return os.WriteFile(path, []byte(sb.String()), 0644)
 }

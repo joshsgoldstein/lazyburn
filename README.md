@@ -29,15 +29,15 @@ If you're running Claude Code across multiple projects and want that visibility,
 ```
 $ lazyburn --all
 
-2026-01-15 – 2026-04-26
-  Folder                Sess   Turns     Time      Tokens    Cache W    Cache R    Output        Cost
+📅 2026-01-15 – 2026-04-26
+  Folder                Sess   Turns     Time      Tokens    Cache W    Cache R    Output      💰 Cost
  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Documents/acme          18     163    148.4h    248.3M     10.2M    237.3M    920.5k    $125.74
-  Documents/globex         5      52     24.1h     61.4M      1.8M     59.5M     95.9k     $26.87
-  Documents/initech        4      10      8.3h     11.5M      1.1M     10.3M     54.1k      $8.56
-  Documents/lab            3       6      2.1h      2.4M    190.3k      2.2M      5.7k      $1.82
+  🔥 Documents/acme      18     163    148.4h    248.3M     10.2M    237.3M    920.5k    $125.74
+  Documents/globex        5      52     24.1h     61.4M      1.8M     59.5M     95.9k     $26.87
+  Documents/initech       4      10      8.3h     11.5M      1.1M     10.3M     54.1k      $8.56
+  Documents/lab           3       6      2.1h      2.4M    190.3k      2.2M      5.7k      $1.82
  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  TOTAL                   30                      323.6M                                  $162.99
+  TOTAL                  30                      323.6M                                  $162.99
 ```
 
 Run it from inside any project and it automatically scopes to that directory — like `git`.
@@ -45,13 +45,13 @@ Run it from inside any project and it automatically scopes to that directory —
 ```
 $ cd ~/Documents/acme/alpha-platform && lazyburn
 
-2026-03-01 – 2026-04-26
+📅 2026-03-01 – 2026-04-26
 Documents/acme/alpha-platform/
-  Session               Date        Time   Turns     Tokens    Cache W    Cache R    Output        Cost   Last Prompt
- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  brave-ancient-reef    2026-04-22   6.3h      22    85.6M      3.1M     82.4M    312.1k    $43.21   implement the auth flow…
-  sleepy-golden-tide    2026-04-19   4.1h      18    74.1M      2.8M     71.2M    268.5k    $37.44   fix the dashboard load…
-  clever-rushing-wind   2026-04-15   2.9h      11    41.2M      1.4M     39.7M    122.8k    $20.18   add export to CSV…
+  Session                  Date        Time   Turns     Tokens    Cache W    Cache R    Output      💰 Cost   Last Prompt
+ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🔥 brave-ancient-reef   2026-04-22   6.3h      22    85.6M      3.1M     82.4M    312.1k    $43.21   implement the auth flow…
+  sleepy-golden-tide       2026-04-19   4.1h      18    74.1M      2.8M     71.2M    268.5k    $37.44   fix the dashboard load…
+  clever-rushing-wind      2026-04-15   2.9h      11    41.2M      1.4M     39.7M    122.8k    $20.18   add export to CSV…
 ```
 
 ---
@@ -133,7 +133,7 @@ lazyburn --path acme --export acme-costs.md
 | **Cache R** | Tokens read back from that memory — much cheaper than re-sending everything fresh |
 | **Output** | Tokens Claude generated in its responses to you |
 | **Cost** | Estimated cost based on Anthropic's API pricing for the models used |
-| **Last Prompt** | The first message you sent in that session — useful for remembering what you were working on |
+| **Last Prompt** | The most recent message you sent in that session — useful for remembering what you were working on |
 
 > Cache W and Cache R are shown separately because they're priced differently and most tools get this wrong. See [How it works](#how-it-works) for the full breakdown.
 
@@ -190,7 +190,7 @@ Claude Code also replays each assistant message multiple times as tokens stream 
 
 ### A note on duration
 
-Session duration is wall-clock time from the first message to the last. A session you left open overnight will show many hours even if you only sent a few messages — there's no way to distinguish idle time from active time in the log data.
+Session duration is wall-clock time from the first message to the last. A session you left open overnight will show many hours even if you only sent a few messages. Active time estimation is on the [roadmap](ROADMAP.md).
 
 > **Subscription users:** Token counts are accurate. Dollar amounts reflect API pricing — not your actual subscription cost.
 

@@ -35,7 +35,9 @@ Sessions are currently attributed to the directory where `claude` was launched (
 ---
 
 ### Active time estimation
-Current duration is wall-clock — first message to last. A session left open overnight shows many hours even if only a few messages were sent. This would use message timestamps to separate actual working time from idle gaps, showing both wall-clock and estimated active time.
+Current duration is wall-clock — first message to last. A session left open overnight shows many hours even if only a few messages were sent. This would add an **Active** column using a configurable idle threshold (default 5 minutes): gaps longer than that are treated as idle and not counted.
+
+The threshold is conservative by design — it's better to undercount than to bill a client for time you weren't working. Long-running background processes (overnight builds, migrations) may be undercounted; that tradeoff is documented.
 
 Particularly useful if you're reporting time to clients and don't want to explain why a session shows 40 hours.
 

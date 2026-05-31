@@ -38,8 +38,11 @@ func CachePath() string {
 
 // defaults are compiled in so the binary works with no network and no cache.
 var defaults = map[string]Prices{
-	"claude-sonnet-4-6": {3.0, 3.75, 6.0, 0.30, 15.0},
+	"claude-opus-4-8":   {5.0, 6.25, 10.0, 0.50, 25.0},
 	"claude-opus-4-7":   {5.0, 6.25, 10.0, 0.50, 25.0},
+	"claude-opus-4-6":   {5.0, 6.25, 10.0, 0.50, 25.0},
+	"claude-sonnet-4-6": {3.0, 3.75, 6.0, 0.30, 15.0},
+	"claude-sonnet-4-5": {3.0, 3.75, 6.0, 0.30, 15.0},
 	"claude-haiku-4-5":  {1.0, 1.25, 2.0, 0.10, 5.0},
 }
 

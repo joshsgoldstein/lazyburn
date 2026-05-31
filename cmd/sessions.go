@@ -6,6 +6,7 @@ import (
 
 	"github.com/joshsgoldstein/lazyburn/internal/output"
 	"github.com/joshsgoldstein/lazyburn/internal/parser"
+	anthropicprovider "github.com/joshsgoldstein/lazyburn/internal/provider/anthropic"
 	"github.com/spf13/cobra"
 )
 
@@ -41,20 +42,33 @@ func runSessions(cmd *cobra.Command, args []string) error {
 
 	home, _ := os.UserHomeDir()
 	cwd, _ := os.Getwd()
-	claudeDir := fmt.Sprintf("%s/.claude", home)
 
 	pathFilter := flagSessionsPath
+	if pathFilter == "" && len(args) > 0 {
+		pathFilter = args[0]
+	}
 	if pathFilter == "" && cwd != home {
 		pathFilter = cwd
 	}
 
-	sessions, err := parser.ParseAllSessions(claudeDir, since, until, pathFilter)
+	prov := anthropicprovider.New()
+	sessions, err := prov.ParseSessions(since, until, pathFilter)
 	if err != nil {
 		return err
 	}
 	if len(sessions) == 0 {
 		fmt.Println("No sessions found.")
 		return nil
+	}
+
+	if pathFilter != "" {
+		fd := parser.FilterDepth(sessions, pathFilter, home)
+		groupMap := parser.GroupByDepth(sessions, fd+1, home)
+		groups := sortedGroups(groupMap)
+		if len(groups) > 1 {
+			output.PrintGroups(groups, sessions)
+			fmt.Println()
+		}
 	}
 
 	output.PrintSessions(sessions)

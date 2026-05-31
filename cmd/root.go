@@ -11,14 +11,16 @@ import (
 	"github.com/joshsgoldstein/lazyburn/internal/models"
 	"github.com/joshsgoldstein/lazyburn/internal/output"
 	"github.com/joshsgoldstein/lazyburn/internal/parser"
+	anthropicprovider "github.com/joshsgoldstein/lazyburn/internal/provider/anthropic"
 	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "lazyburn",
-	Short: "Claude Code cost tracker",
-	Long:  "Track Claude Code costs by folder, session, and date.\n\nFilter to a folder: lazyburn --path acme",
-	RunE:  runRoot,
+	Use:     "lazyburn",
+	Version: "0.2.1",
+	Short:   "Claude Code cost tracker",
+	Long:    "Track Claude Code costs by folder, session, and date.\n\nFilter to a folder: lazyburn --path acme",
+	RunE:    runRoot,
 }
 
 var (
@@ -64,7 +66,6 @@ func runRoot(cmd *cobra.Command, args []string) error {
 
 	home, _ := os.UserHomeDir()
 	cwd, _ := os.Getwd()
-	claudeDir := fmt.Sprintf("%s/.claude", home)
 
 	var activeFilter string
 	switch {
@@ -74,7 +75,8 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		activeFilter = cwd
 	}
 
-	sessions, err := parser.ParseAllSessions(claudeDir, since, until, activeFilter)
+	prov := anthropicprovider.New()
+	sessions, err := prov.ParseSessions(since, until, activeFilter)
 	if err != nil {
 		return err
 	}
@@ -92,26 +94,16 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		groupMap := parser.GroupByDepth(sessions, fd+1, home)
 		groups := sortedGroups(groupMap)
 
-		if len(groups) > 1 {
-			output.PrintGroups(groups, sessions)
-			if flagShowSession {
-				fmt.Println()
-				output.PrintSessions(sessions)
-			}
-			if flagExport != "" {
-				if err := exportGroups(flagExport, groups); err != nil {
-					return err
-				}
-				fmt.Printf("Exported to %s\n", flagExport)
-			}
-		} else {
+		output.PrintGroups(groups, sessions)
+		if flagShowSession {
+			fmt.Println()
 			output.PrintSessions(sessions)
-			if flagExport != "" {
-				if err := exportSessions(flagExport, sessions); err != nil {
-					return err
-				}
-				fmt.Printf("Exported to %s\n", flagExport)
+		}
+		if flagExport != "" {
+			if err := exportGroups(flagExport, groups); err != nil {
+				return err
 			}
+			fmt.Printf("Exported to %s\n", flagExport)
 		}
 	} else {
 		groupMap := parser.GroupByDepth(sessions, flagDepth, home)
@@ -128,6 +120,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Exported to %s\n", flagExport)
 		}
 	}
+
 	return nil
 }
 

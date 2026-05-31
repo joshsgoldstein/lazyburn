@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lazyburn"
-version = "0.2.0"
+version = "0.2.1"
 description = "Track Claude Code costs by folder, session, and date"
 readme = "README.md"
 license = { file = "LICENSE" }

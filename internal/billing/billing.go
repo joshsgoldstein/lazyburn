@@ -4,8 +4,8 @@ import "math"
 
 // Plan describes a subscription billing tier.
 type Plan struct {
-	Name        string
-	MonthlyFee  float64
+	Name       string
+	MonthlyFee float64
 	// IncludedUSD is the API-equivalent value covered by the plan per month.
 	// 0 means pure pay-per-use (API billing with no subscription credit).
 	IncludedUSD float64
@@ -22,12 +22,12 @@ var KnownPlans = map[string]Plan{
 
 // Summary is the result of applying a Plan to an observed API-equivalent cost.
 type Summary struct {
-	PlanName  string
-	APIEquiv  float64 // total at pay-per-use rates
-	PlanFee   float64 // monthly subscription fee
-	Budget    float64 // included credit applied to this period
-	Included  float64 // portion of APIEquiv covered by the budget
-	Overage   float64 // amount beyond the budget (you may be billed this)
+	PlanName string
+	APIEquiv float64 // total at pay-per-use rates
+	PlanFee  float64 // monthly subscription fee
+	Budget   float64 // included credit applied to this period
+	Included float64 // portion of APIEquiv covered by the budget
+	Overage  float64 // amount beyond the budget (you may be billed this)
 }
 
 // Calculate applies budget to totalCost and returns a billing Summary.

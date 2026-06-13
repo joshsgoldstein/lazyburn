@@ -52,6 +52,19 @@ Generate a plain-English summary of what happened in each session — what was b
 
 ---
 
+### Cost calculation trace (`--explain`)
+Show the full arithmetic behind a total so every dollar is auditable: for each model, the per-token-type counts (input / cache-write / cache-read / output) × the official rate → subtotal, summed to the model cost, summed to the grand total. Useful for reconciling against the Anthropic Console bill and for putting a defensible number in front of a client.
+
+Reads the same verbatim `usage` fields the API logs (`cache_read_input_tokens`, `cache_creation_input_tokens`, etc.) — nothing inferred except the per-token prices, which come from the pricing table.
+
+```sh
+lazyburn --explain --path acme   # per-model token × rate breakdown up to the total
+```
+
+[Suggest / vote on this feature →](https://github.com/joshsgoldstein/lazyburn/issues/new)
+
+---
+
 ## Known limitations
 
 - **Duration is wall-clock time** — time between first and last message in a session, not active API time. A session left open overnight will show many hours.

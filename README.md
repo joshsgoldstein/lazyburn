@@ -30,14 +30,18 @@ If you're running Claude Code across multiple projects and want that visibility,
 $ lazyburn --all
 
 📅 2026-01-15 – 2026-04-26
-  Folder                Sess   Turns     Time      Tokens    Cache W    Cache R    Output      💰 Cost
- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  🔥 Documents/acme      18     163    148.4h    248.3M     10.2M    237.3M    920.5k    $125.74
-  Documents/globex        5      52     24.1h     61.4M      1.8M     59.5M     95.9k     $26.87
-  Documents/initech       4      10      8.3h     11.5M      1.1M     10.3M     54.1k      $8.56
-  Documents/lab           3       6      2.1h      2.4M    190.3k      2.2M      5.7k      $1.82
- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  TOTAL                  30                      323.6M                                  $162.99
+  Folder                Sess   Turns     Time      Tokens    Cache W    Cache R    Output      💰 Cost    💸 Saved
+ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🔥 Documents/acme      18     163    148.4h    248.3M     10.2M    237.3M    920.5k    $125.74    $540.18
+  Documents/globex        5      52     24.1h     61.4M      1.8M     59.5M     95.9k     $26.87    $118.43
+  Documents/initech       4      10      8.3h     11.5M      1.1M     10.3M     54.1k      $8.56     $35.20
+  Documents/lab           3       6      2.1h      2.4M    190.3k      2.2M      5.7k      $1.82      $7.04
+ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  TOTAL                  30                      323.6M                                  $162.99    $700.85
+
+  💰 Actual cost       $162.99   logged tokens × API rates
+  🧊 Without caching   $863.84   if cached tokens were billed as input
+  💸 Cache saved       $700.85   5.3× cheaper — avoided, not charged
 ```
 
 Run it from inside any project and it automatically scopes to that directory — like `git`.
@@ -133,6 +137,7 @@ lazyburn --path acme --export acme-costs.md
 | **Cache R** | Tokens read back from that memory — much cheaper than re-sending everything fresh |
 | **Output** | Tokens Claude generated in its responses to you |
 | **Cost** | Estimated cost based on Anthropic's API pricing for the models used |
+| **Saved** | Dollars prompt caching avoided — what the cached tokens *would* have cost at full input price, minus what they actually cost. Money you didn't spend, not a charge. |
 | **Last Prompt** | The most recent message you sent in that session — useful for remembering what you were working on |
 
 > Cache W and Cache R are shown separately because they're priced differently and most tools get this wrong. See [How it works](#how-it-works) for the full breakdown.
@@ -146,14 +151,14 @@ $ lazyburn --path acme
 
 2026-03-01 – 2026-04-26
 Documents/acme/
-  Folder              Sess   Turns     Time      Tokens    Cache W    Cache R    Output        Cost
- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  alpha-platform        13     147    112.3h    225.1M      8.2M    214.5M    774.4k    $108.62
-  api-service            3      14     18.7h     22.5M      2.0M     20.4M    132.3k     $15.86
-  data-pipeline          2       2      4.2h      1.8M     89.0k      1.7M     13.0k      $1.05
-  (this folder)          2       4      8.1h      3.5M    320.0k      3.1M     20.0k      $2.10
- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  TOTAL                 20     167             252.9M                                   $127.63
+  Folder              Sess   Turns     Time      Tokens    Cache W    Cache R    Output        Cost      Saved
+ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  alpha-platform        13     147    112.3h    225.1M      8.2M    214.5M    774.4k    $108.62    $466.10
+  api-service            3      14     18.7h     22.5M      2.0M     20.4M    132.3k     $15.86     $68.20
+  data-pipeline          2       2      4.2h      1.8M     89.0k      1.7M     13.0k      $1.05      $4.30
+  (this folder)          2       4      8.1h      3.5M    320.0k      3.1M     20.0k      $2.10      $8.55
+ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  TOTAL                 20     167             252.9M                                   $127.63    $547.15
 ```
 
 The common path prefix is shown above the table so folder names stay compact. Sessions run directly from the filtered folder (not from a sub-project) appear as `(this folder)`.
@@ -188,6 +193,20 @@ Claude's cache has two write tiers priced differently — a 5-minute tier and a 
 
 Claude Code also replays each assistant message multiple times as tokens stream in. lazyburn deduplicates by request ID and keeps the final count so nothing is double-billed.
 
+### Cache savings
+
+The `💸 Saved` column and summary answer a question the dashboard never will: *how much did prompt caching actually save me?*
+
+For every cached token — both writes and reads, taken verbatim from the API's `usage` fields — lazyburn computes what it would have cost billed as standard input, and subtracts what it actually cost at cache rates. Cache reads are billed at 0.1× input, so a token re-read 25 times instead of re-sent is a large, real saving.
+
+```
+  💰 Actual cost       $162.99   logged tokens × API rates
+  🧊 Without caching   $863.84   if cached tokens were billed as input
+  💸 Cache saved       $700.85   5.3× cheaper — avoided, not charged
+```
+
+The token counts are reported by the API, not inferred. The only modeled part is the counterfactual — "without caching you'd have re-sent the same tokens as input" — which is the standard, conservative framing (real-world cache misses would resend even more). **Saved is money you didn't spend, never a charge.**
+
 ### A note on duration
 
 Session duration is wall-clock time from the first message to the last. A session you left open overnight will show many hours even if you only sent a few messages. Active time estimation is on the [roadmap](ROADMAP.md).
@@ -200,11 +219,17 @@ Session duration is wall-clock time from the first message to the last. A sessio
 
 | Model | Input | Cache Write 5m | Cache Write 1h | Cache Read | Output |
 |---|---|---|---|---|---|
-| claude-sonnet-4-6 | $3.00 | $3.75 | $6.00 | $0.30 | $15.00 |
+| claude-fable-5 | $10.00 | $12.50 | $20.00 | $1.00 | $50.00 |
+| claude-mythos-5 | $10.00 | $12.50 | $20.00 | $1.00 | $50.00 |
+| claude-opus-4-8 | $5.00 | $6.25 | $10.00 | $0.50 | $25.00 |
 | claude-opus-4-7 | $5.00 | $6.25 | $10.00 | $0.50 | $25.00 |
+| claude-opus-4-6 | $5.00 | $6.25 | $10.00 | $0.50 | $25.00 |
+| claude-opus-4-5 | $5.00 | $6.25 | $10.00 | $0.50 | $25.00 |
+| claude-sonnet-4-6 | $3.00 | $3.75 | $6.00 | $0.30 | $15.00 |
+| claude-sonnet-4-5 | $3.00 | $3.75 | $6.00 | $0.30 | $15.00 |
 | claude-haiku-4-5 | $1.00 | $1.25 | $2.00 | $0.10 | $5.00 |
 
-Per million tokens. Unknown models fall back to Sonnet 4.6 pricing. Source: [Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing)
+Per million tokens. A pricing file pulled via `update-pricing` is *merged over* these compiled defaults, so a model missing from the file keeps its built-in rate rather than mispricing. Unknown models fall back by family — a new Opus is priced as Opus, never silently as Sonnet. Source: [Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing)
 
 ---
 

@@ -145,7 +145,7 @@ var tableStyle = table.Style{
 		Header: text.FormatDefault,
 		Row:    text.FormatDefault,
 	},
-	HTML:    table.DefaultHTMLOptions,
+	HTML: table.DefaultHTMLOptions,
 	Options: table.Options{
 		DrawBorder:      false,
 		SeparateColumns: false,
@@ -174,9 +174,11 @@ func PrintGroups(groups []Group, allSessions []models.Session) {
 
 	totalCost := 0.0
 	totalTokens := 0
+	totalSavings := 0.0
 	for _, g := range groups {
 		u := parser.Aggregate(g.Sessions)
 		totalCost += u.Cost
+		totalSavings += u.Savings
 		totalTokens += u.Input + u.CacheWrite() + u.CacheRead + u.Output
 	}
 
@@ -192,7 +194,7 @@ func PrintGroups(groups []Group, allSessions []models.Session) {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.SetStyle(tableStyle)
-	t.AppendHeader(table.Row{"Folder", "Sess", "Turns", "Time", "Tokens", "Cache W", "Cache R", "Output", "💰 Cost"})
+	t.AppendHeader(table.Row{"Folder", "Sess", "Turns", "Time", "Tokens", "Cache W", "Cache R", "Output", "💰 Cost", "💸 Saved"})
 	t.SetColumnConfigs([]table.ColumnConfig{
 		{Number: 1, Colors: text.Colors{text.FgCyan}},
 		{Number: 2, Align: text.AlignRight},
@@ -203,6 +205,7 @@ func PrintGroups(groups []Group, allSessions []models.Session) {
 		{Number: 7, Align: text.AlignRight},
 		{Number: 8, Align: text.AlignRight},
 		{Number: 9, Align: text.AlignRight, Colors: text.Colors{text.FgGreen}, WidthMin: 10},
+		{Number: 10, Align: text.AlignRight, Colors: text.Colors{text.FgHiBlack}, WidthMin: 9},
 	})
 
 	for _, g := range groups {
@@ -228,11 +231,28 @@ func PrintGroups(groups []Group, allSessions []models.Session) {
 			FmtTokens(u.CacheRead),
 			FmtTokens(u.Output),
 			FmtCost(u.Cost),
+			FmtCost(u.Savings),
 		})
 	}
 
-	t.AppendFooter(table.Row{"TOTAL", len(allSessions), "", "", FmtTokens(totalTokens), "", "", "", FmtCost(totalCost)})
+	t.AppendFooter(table.Row{"TOTAL", len(allSessions), "", "", FmtTokens(totalTokens), "", "", "", FmtCost(totalCost), FmtCost(totalSavings)})
 	t.Render()
+
+	PrintCacheSavings(totalCost, totalSavings)
+}
+
+// PrintCacheSavings shows the actual cost, the no-cache counterfactual, and the
+// dollars prompt caching avoided. The saved figure is money NOT spent — never a charge.
+func PrintCacheSavings(totalCost, totalSavings float64) {
+	if totalSavings <= 0 || totalCost <= 0 {
+		return
+	}
+	noCache := totalCost + totalSavings
+	mult := noCache / totalCost
+	fmt.Println()
+	fmt.Printf("  💰 Actual cost      %10s   logged tokens × API rates\n", FmtCost(totalCost))
+	fmt.Printf("  🧊 Without caching  %10s   if cached tokens were billed as input\n", FmtCost(noCache))
+	fmt.Printf("  💸 Cache saved      %10s   %.1f× cheaper — avoided, not charged\n", FmtCost(totalSavings), mult)
 }
 
 // ── Session table ──────────────────────────────────────────────────────────────
@@ -305,7 +325,7 @@ func ExportGroupsCSV(path string, groups []Group) error {
 	}
 	defer f.Close()
 	w := csv.NewWriter(f)
-	w.Write([]string{"folder", "sessions", "turns", "cache_write_tokens", "cache_read_tokens", "output_tokens", "estimated_cost_usd"})
+	w.Write([]string{"folder", "sessions", "turns", "cache_write_tokens", "cache_read_tokens", "output_tokens", "estimated_cost_usd", "cache_savings_usd"})
 	for _, g := range groups {
 		u := parser.Aggregate(g.Sessions)
 		turns := 0
@@ -315,7 +335,7 @@ func ExportGroupsCSV(path string, groups []Group) error {
 		w.Write([]string{
 			g.Folder, strconv.Itoa(len(g.Sessions)), strconv.Itoa(turns),
 			strconv.Itoa(u.CacheWrite()), strconv.Itoa(u.CacheRead), strconv.Itoa(u.Output),
-			fmt.Sprintf("%.6f", u.Cost),
+			fmt.Sprintf("%.6f", u.Cost), fmt.Sprintf("%.6f", u.Savings),
 		})
 	}
 	w.Flush()
@@ -324,13 +344,14 @@ func ExportGroupsCSV(path string, groups []Group) error {
 
 func ExportGroupsJSON(path string, groups []Group) error {
 	type row struct {
-		Folder  string  `json:"folder"`
-		Sessions int    `json:"sessions"`
-		Turns   int     `json:"turns"`
-		CacheWriteTokens int `json:"cache_write_tokens"`
-		CacheReadTokens  int `json:"cache_read_tokens"`
-		OutputTokens     int `json:"output_tokens"`
+		Folder           string  `json:"folder"`
+		Sessions         int     `json:"sessions"`
+		Turns            int     `json:"turns"`
+		CacheWriteTokens int     `json:"cache_write_tokens"`
+		CacheReadTokens  int     `json:"cache_read_tokens"`
+		OutputTokens     int     `json:"output_tokens"`
 		EstimatedCostUSD float64 `json:"estimated_cost_usd"`
+		CacheSavingsUSD  float64 `json:"cache_savings_usd"`
 	}
 	rows := make([]row, 0, len(groups))
 	for _, g := range groups {
@@ -347,6 +368,7 @@ func ExportGroupsJSON(path string, groups []Group) error {
 			CacheReadTokens:  u.CacheRead,
 			OutputTokens:     u.Output,
 			EstimatedCostUSD: u.Cost,
+			CacheSavingsUSD:  u.Savings,
 		})
 	}
 	b, err := json.MarshalIndent(rows, "", "  ")

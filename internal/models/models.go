@@ -9,6 +9,10 @@ type TokenUsage struct {
 	CacheRead    int
 	Output       int
 	Cost         float64
+	// Savings is the dollar amount prompt caching avoided: the cost of all
+	// cached tokens if they had been billed as standard input, minus the
+	// actual (discounted) cost.
+	Savings float64
 }
 
 func (u *TokenUsage) Add(other TokenUsage) {
@@ -18,6 +22,7 @@ func (u *TokenUsage) Add(other TokenUsage) {
 	u.CacheRead += other.CacheRead
 	u.Output += other.Output
 	u.Cost += other.Cost
+	u.Savings += other.Savings
 }
 
 func (u TokenUsage) CacheWrite() int {

@@ -14,15 +14,15 @@ import (
 )
 
 type jsonMessage struct {
-	Type       string          `json:"type"`
-	Timestamp  string          `json:"timestamp"`
-	Cwd        string          `json:"cwd"`
-	RequestID  string          `json:"requestId"`
-	SessionID  string          `json:"sessionId"`
-	Subtype    string          `json:"subtype"`
-	Slug       string          `json:"slug"`
-	Message    jsonInnerMsg    `json:"message"`
-	LastPrompt string          `json:"lastPrompt"`
+	Type       string       `json:"type"`
+	Timestamp  string       `json:"timestamp"`
+	Cwd        string       `json:"cwd"`
+	RequestID  string       `json:"requestId"`
+	SessionID  string       `json:"sessionId"`
+	Subtype    string       `json:"subtype"`
+	Slug       string       `json:"slug"`
+	Message    jsonInnerMsg `json:"message"`
+	LastPrompt string       `json:"lastPrompt"`
 }
 
 type jsonInnerMsg struct {
@@ -32,10 +32,10 @@ type jsonInnerMsg struct {
 }
 
 type jsonUsage struct {
-	InputTokens              int              `json:"input_tokens"`
-	OutputTokens             int              `json:"output_tokens"`
-	CacheReadInputTokens     int              `json:"cache_read_input_tokens"`
-	CacheCreationInputTokens int              `json:"cache_creation_input_tokens"`
+	InputTokens              int               `json:"input_tokens"`
+	OutputTokens             int               `json:"output_tokens"`
+	CacheReadInputTokens     int               `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int               `json:"cache_creation_input_tokens"`
 	CacheCreation            jsonCacheCreation `json:"cache_creation"`
 }
 
@@ -163,6 +163,16 @@ func ParseJSONL(path string, since, until time.Time) (*models.Session, error) {
 				float64(usage.CacheWrite1h)*p.Cache1h +
 				float64(usage.CacheRead)*p.CacheRead +
 				float64(usage.Output)*p.Output) / 1_000_000
+
+			// Savings = what the cached tokens (writes + reads) would have cost as
+			// standard input, minus what they actually cost at cache rates. Token
+			// counts are reported verbatim by the API; only the "billed as input"
+			// counterfactual is modeled (the conservative, standard framing).
+			cachedTokens := float64(usage.CacheWrite5m + usage.CacheWrite1h + usage.CacheRead)
+			cachedActual := float64(usage.CacheWrite5m)*p.Cache5m +
+				float64(usage.CacheWrite1h)*p.Cache1h +
+				float64(usage.CacheRead)*p.CacheRead
+			usage.Savings = (cachedTokens*p.Input - cachedActual) / 1_000_000
 
 			// Keep last occurrence — streaming replays each request with the final token counts.
 			key := dedupKey(msg.Message.ID, msg.RequestID, msg.SessionID, len(deduped))

@@ -17,8 +17,8 @@ type Prices struct {
 
 // PricingFile is the shape of pricing.json.
 type PricingFile struct {
-	Updated string             `json:"updated"`
-	Source  string             `json:"source"`
+	Updated string                `json:"updated"`
+	Source  string                `json:"source"`
 	Models  map[string]priceEntry `json:"models"`
 }
 
@@ -37,10 +37,15 @@ func CachePath() string {
 }
 
 // defaults are compiled in so the binary works with no network and no cache.
+// Verified against https://platform.claude.com/docs/en/about-claude/pricing (2026-06-13).
+// Fields: Input, Cache5m, Cache1h, CacheRead, Output (USD per 1M tokens).
 var defaults = map[string]Prices{
+	"claude-fable-5":    {10.0, 12.50, 20.0, 1.0, 50.0},
+	"claude-mythos-5":   {10.0, 12.50, 20.0, 1.0, 50.0},
 	"claude-opus-4-8":   {5.0, 6.25, 10.0, 0.50, 25.0},
 	"claude-opus-4-7":   {5.0, 6.25, 10.0, 0.50, 25.0},
 	"claude-opus-4-6":   {5.0, 6.25, 10.0, 0.50, 25.0},
+	"claude-opus-4-5":   {5.0, 6.25, 10.0, 0.50, 25.0},
 	"claude-sonnet-4-6": {3.0, 3.75, 6.0, 0.30, 15.0},
 	"claude-sonnet-4-5": {3.0, 3.75, 6.0, 0.30, 15.0},
 	"claude-haiku-4-5":  {1.0, 1.25, 2.0, 0.10, 5.0},
@@ -51,7 +56,7 @@ var active = defaults
 
 func init() {
 	if pf, err := LoadFile(CachePath()); err == nil {
-		active = toMap(pf)
+		active = mergeDefaults(pf)
 	}
 }
 
@@ -78,16 +83,35 @@ func Get(model string) Prices {
 			return p
 		}
 	}
+	// Unknown model: fall back by family so a new Opus/Haiku is never billed
+	// as Sonnet (which silently undercounts the most expensive tier).
+	switch {
+	case strings.Contains(model, "opus"):
+		if p, ok := active["claude-opus-4-8"]; ok {
+			return p
+		}
+	case strings.Contains(model, "haiku"):
+		if p, ok := active["claude-haiku-4-5"]; ok {
+			return p
+		}
+	}
 	return active["claude-sonnet-4-6"]
 }
 
-// ApplyFile replaces the active pricing table with the contents of a PricingFile.
+// ApplyFile overlays a PricingFile on top of the compiled defaults and makes it
+// the active table. A model absent from the file keeps its built-in price.
 func ApplyFile(pf *PricingFile) {
-	active = toMap(pf)
+	active = mergeDefaults(pf)
 }
 
-func toMap(pf *PricingFile) map[string]Prices {
-	m := make(map[string]Prices, len(pf.Models))
+// mergeDefaults returns a pricing table seeded from the compiled defaults with
+// the file's entries overlaid on top. This prevents a model that's missing from
+// the cached/downloaded pricing.json from silently falling back to Sonnet.
+func mergeDefaults(pf *PricingFile) map[string]Prices {
+	m := make(map[string]Prices, len(defaults)+len(pf.Models))
+	for model, p := range defaults {
+		m[model] = p
+	}
 	for model, e := range pf.Models {
 		m[model] = Prices{e.Input, e.Cache5m, e.Cache1h, e.CacheRead, e.Output}
 	}
